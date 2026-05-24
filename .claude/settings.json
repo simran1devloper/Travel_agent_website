@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import ast, sys; [ast.parse\\(open\\(f\\).read\\(\\)\\) or print\\(f'OK: {f}'\\) for f in ['backend/app/auth.py','backend/app/database.py','backend/app/main.py']]\")",
+      "Bash(npx tsc *)",
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '.'\\); from backend.app.main import app\")",
+      "Bash(python3 -m uvicorn backend.app.main:app --port 8000 --help)",
+      "Read(//home/sonia/.local/lib/**)",
+      "Read(//home/sonia/**)",
+      "Read(//usr/local/lib/**)",
+      "Bash(/home/sonia/Project/.venv/bin/python -c \"from backend.app.main import app; print\\('OK'\\)\")",
+      "Bash(/home/sonia/Project/.venv/bin/pip install *)",
+      "Bash(/home/sonia/Project/.venv/bin/python -m pip install \"PyJWT[crypto]>=2.10,<3.0\" \"email-validator==2.2.0\" \"python-multipart==0.0.20\")",
+      "Bash(uv --version)",
+      "Bash(uv add *)",
+      "Bash(/home/sonia/Project/.venv/bin/python -c \"from backend.app.main import app; print\\('Backend imports OK'\\)\")",
+      "Bash(/home/sonia/Project/.venv/bin/python -c ' *)",
+      "Bash(sqlite3 /home/sonia/Documents/MY_PROJECTS/WEB_APPLICATION/Travel_agent_app/vista-forge-tours-main/backend/backend/data/journeymakers.sqlite3 \"PRAGMA table_info\\(customers\\);\")",
+      "Bash(python3 -c ' *)",
+      "Bash(npm run *)",
+      "Bash(grep -v \"^$\")"
+    ]
+  }
+}
