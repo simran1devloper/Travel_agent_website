@@ -3,9 +3,9 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { useLocalAuth } from "@/components/auth-provider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
+import { useAdminTabPref } from "@/lib/user-prefs";
 import { PageShell } from "@/components/page-shell";
 import { StarRating } from "@/components/star-rating";
-import { packages, destinations } from "@/lib/mock-data";
 import {
   api,
   type ApiMedia,
@@ -16,6 +16,12 @@ import {
   type ApiDestination,
   type PackagePayload,
   type DestinationPayload,
+  type ApiService,
+  type ApiFaq,
+  type ApiTestimonial,
+  type ApiSiteStat,
+  type ApiOffer,
+  type OfferPayload,
 } from "@/lib/api";
 import { AUTH0_ENABLED } from "@/lib/auth-config";
 import {
@@ -42,6 +48,7 @@ import {
   UserCircle,
   SquareCheck,
   Square,
+  ShieldAlert,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -51,7 +58,120 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-type AdminTab = "overview" | "packages" | "media" | "reviews" | "planners";
+// ── Bulk-select hook ──────────────────────────────────────────────────────────
+
+function useBulkSelect<T>(items: T[], getId: (item: T) => string) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === items.length) setSelected(new Set());
+    else setSelected(new Set(items.map(getId)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  const allSelected = items.length > 0 && selected.size === items.length;
+  const someSelected = selected.size > 0 && !allSelected;
+
+  return { selected, toggleOne, toggleAll, clearSelection, allSelected, someSelected };
+}
+
+// ── Reusable row-checkbox ─────────────────────────────────────────────────────
+
+function RowCheck({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      className="shrink-0 p-1 text-muted-foreground hover:text-foreground"
+      aria-label={checked ? "Deselect" : "Select"}
+    >
+      {checked ? (
+        <SquareCheck className="size-4 text-accent" />
+      ) : (
+        <Square className="size-4" />
+      )}
+    </button>
+  );
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+function BulkBar({
+  count,
+  onClear,
+  children,
+}: {
+  count: number;
+  onClear: () => void;
+  children: React.ReactNode;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-accent/40 bg-accent/5 px-4 py-3 text-sm">
+      <span className="font-bold text-accent">{count} selected</span>
+      <div className="h-4 w-px bg-border" />
+      {children}
+      <div className="ml-auto">
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Session expired / auth error banner ──────────────────────────────────────
+
+function SessionBanner({ error }: { error: Error | null }) {
+  if (!error) return null;
+  const isAuth =
+    error.message.includes("401") ||
+    error.message.includes("403") ||
+    error.message.toLowerCase().includes("unauthorized") ||
+    error.message.toLowerCase().includes("forbidden") ||
+    error.message.toLowerCase().includes("admin role");
+  if (!isAuth) return null;
+  return (
+    <div className="mb-6 flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-4">
+      <ShieldAlert className="size-5 shrink-0 text-destructive" />
+      <div>
+        <p className="text-sm font-bold text-destructive">Session expired or access denied</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {import.meta.env.PROD
+            ? "Your session has expired. Please sign in again."
+            : "Dev token mismatch — check VITE_ADMIN_TOKEN in your .env"}
+        </p>
+      </div>
+      <a href="/signin" className="ml-auto text-xs font-bold text-accent hover:underline">
+        Sign in →
+      </a>
+    </div>
+  );
+}
+
+type AdminTab = "overview" | "packages" | "media" | "reviews" | "planners" | "content" | "offers" | "pages";
 
 function AdminPage() {
   const { localUser } = useLocalAuth();
@@ -132,14 +252,18 @@ function AdminAuthGate() {
 }
 
 function AdminContent() {
-  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  // Persists last-visited tab across refreshes
+  const [activeTab, setActiveTab] = useAdminTabPref();
 
   const tabs: { key: AdminTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "packages", label: "Packages" },
+    { key: "content", label: "Content" },
     { key: "media", label: "Media" },
     { key: "reviews", label: "Reviews" },
     { key: "planners", label: "Planners" },
+    { key: "offers", label: "Offers" },
+    { key: "pages", label: "Pages" },
   ];
 
   return (
@@ -164,9 +288,12 @@ function AdminContent() {
 
       {activeTab === "overview" && <OverviewTab />}
       {activeTab === "packages" && <PackagesTab />}
+      {activeTab === "content" && <ContentTab />}
       {activeTab === "media" && <MediaTab />}
       {activeTab === "reviews" && <ReviewsTab />}
       {activeTab === "planners" && <PlannersTab />}
+      {activeTab === "offers" && <OffersTab />}
+      {activeTab === "pages" && <PagesTab />}
     </PageShell>
   );
 }
@@ -178,8 +305,31 @@ function OverviewTab() {
   const statsQuery = useQuery({ queryKey: ["admin-stats"], queryFn: api.adminStats });
   const inquiriesQuery = useQuery({ queryKey: ["admin-inquiries"], queryFn: api.adminInquiries });
   const plannersQuery = useQuery({ queryKey: ["planners"], queryFn: api.listPlanners });
+  const pkgsOverviewQuery = useQuery({ queryKey: ["admin-packages"], queryFn: api.adminPackages });
+  const destsOverviewQuery = useQuery({ queryKey: ["destinations"], queryFn: api.destinations });
   const stats = statsQuery.data;
   const planners = plannersQuery.data ?? [];
+  const overviewPackages = pkgsOverviewQuery.data ?? [];
+  const overviewDestinations = destsOverviewQuery.data ?? [];
+
+  // ── Bulk import state ──
+  const [importStatus, setImportStatus] = useState<{
+    kind: string;
+    imported: number;
+    errors: { row: number; message: string }[];
+  } | null>(null);
+
+  async function handleImport(kind: string, file: File) {
+    setImportStatus(null);
+    try {
+      const result = await api.adminImportCsv(kind, file);
+      setImportStatus({ kind, ...result });
+      qc.invalidateQueries({ queryKey: [kind] });
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+    } catch (err) {
+      setImportStatus({ kind, imported: 0, errors: [{ row: 0, message: String(err) }] });
+    }
+  }
 
   const displayedLeads = inquiriesQuery.data?.length
     ? inquiriesQuery.data.map((lead) => ({
@@ -225,6 +375,8 @@ function OverviewTab() {
         },
       ];
 
+  const inquiryBulk = useBulkSelect(displayedLeads, (l) => l.id);
+
   const updateInquiry = useMutation({
     mutationFn: ({
       id,
@@ -243,8 +395,42 @@ function OverviewTab() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-inquiries"] }),
   });
 
+  const bulkUpdateInquiries = useMutation({
+    mutationFn: ({ status }: { status: string }) =>
+      api.adminBulkUpdateInquiries(Array.from(inquiryBulk.selected), status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-inquiries"] });
+      inquiryBulk.clearSelection();
+    },
+  });
+
   return (
     <>
+      <SessionBanner error={statsQuery.error as Error | null} />
+
+      {/* Import result banner */}
+      {importStatus && (
+        <div className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+          <div className="flex-1">
+            <span className="font-bold">
+              {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
+              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+            </span>
+            {importStatus.errors.length > 0 && (
+              <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
+                {importStatus.errors.slice(0, 5).map((e) => (
+                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                ))}
+                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 mb-12">
         <StatCard
@@ -280,15 +466,41 @@ function OverviewTab() {
             <Search className="size-3.5 text-muted-foreground" />
             <input placeholder="Search leads…" className="bg-transparent outline-none w-40" />
           </div>
-          <button className="text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary">
+          <button
+            onClick={() => api.adminExportInquiriesCsv()}
+            className="text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary"
+          >
             <Download className="size-3" /> Export CSV
           </button>
         </SectionHeader>
-        <div className="border border-border rounded-2xl overflow-hidden">
+
+        {/* Bulk bar — shown when rows are selected */}
+        <BulkBar count={inquiryBulk.selected.size} onClear={inquiryBulk.clearSelection}>
+          <span className="text-xs text-muted-foreground">Set status:</span>
+          {["New", "Assigned", "In review", "Quoted", "Won", "Lost"].map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={bulkUpdateInquiries.isPending}
+              onClick={() => bulkUpdateInquiries.mutate({ status: s })}
+              className="rounded-full border border-border px-3 py-1 text-xs font-bold hover:bg-secondary disabled:opacity-50"
+            >
+              {s}
+            </button>
+          ))}
+        </BulkBar>
+
+        <div className="border border-border rounded-2xl overflow-hidden mt-3">
           <div className="hidden md:grid grid-cols-12 gap-2 px-5 py-3 bg-secondary text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+            <div className="col-span-1 flex items-center">
+              <RowCheck
+                checked={inquiryBulk.allSelected}
+                onToggle={inquiryBulk.toggleAll}
+              />
+            </div>
             <div className="col-span-2">ID</div>
             <div className="col-span-2">Customer</div>
-            <div className="col-span-2">Destination</div>
+            <div className="col-span-1">Dest.</div>
             <div className="col-span-1">Budget</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-3">Planner</div>
@@ -296,26 +508,31 @@ function OverviewTab() {
           {displayedLeads.map((l, i) => (
             <div
               key={l.id}
-              className={`grid grid-cols-2 md:grid-cols-12 gap-2 px-5 py-4 items-center text-sm ${i > 0 ? "border-t border-border" : ""}`}
+              onClick={() => inquiryBulk.toggleOne(l.id)}
+              className={`grid grid-cols-2 md:grid-cols-12 gap-2 px-5 py-4 items-center text-sm cursor-pointer transition-colors ${i > 0 ? "border-t border-border" : ""} ${inquiryBulk.selected.has(l.id) ? "bg-accent/5" : "hover:bg-secondary/40"}`}
             >
+              <div className="hidden md:flex md:col-span-1 items-center" onClick={(e) => e.stopPropagation()}>
+                <RowCheck
+                  checked={inquiryBulk.selected.has(l.id)}
+                  onToggle={() => inquiryBulk.toggleOne(l.id)}
+                />
+              </div>
               <div className="md:col-span-2 font-mono text-xs">{l.id}</div>
               <div className="md:col-span-2 font-medium">{l.name}</div>
-              <div className="md:col-span-2 text-muted-foreground">{l.destination}</div>
+              <div className="md:col-span-1 text-muted-foreground text-xs truncate">{l.destination}</div>
               <div className="md:col-span-1 text-muted-foreground text-xs">{l.budget}</div>
-              <div className="md:col-span-2">
+              <div className="md:col-span-2" onClick={(e) => e.stopPropagation()}>
                 <select
                   defaultValue={l.status}
                   onChange={(e) => updateInquiry.mutate({ id: l.id, status: e.target.value })}
                   className="text-[10px] font-mono uppercase tracking-widest rounded-full px-2.5 py-1 border border-border bg-background focus:outline-none"
                 >
                   {["New", "Assigned", "In review", "Quoted", "Won", "Lost"].map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
+                    <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
               </div>
-              <div className="md:col-span-3">
+              <div className="md:col-span-3" onClick={(e) => e.stopPropagation()}>
                 <select
                   value={l.assigned_planner_id ?? ""}
                   onChange={(e) =>
@@ -328,9 +545,7 @@ function OverviewTab() {
                 >
                   <option value="">Unassigned</option>
                   {planners.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
+                    <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
               </div>
@@ -342,21 +557,30 @@ function OverviewTab() {
       {/* Packages */}
       <section className="mb-12">
         <SectionHeader title="Packages">
-          <button className="text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary">
+          <label className="cursor-pointer text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary">
             <Upload className="size-3" /> Bulk import CSV
-          </button>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) { handleImport("packages", f); e.target.value = ""; }
+              }}
+            />
+          </label>
           <button className="text-xs font-bold tracking-widest uppercase bg-foreground text-background px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-accent">
             <Plus className="size-3" /> New package
           </button>
         </SectionHeader>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {packages.map((p) => (
+          {overviewPackages.map((p) => (
             <div
               key={p.slug}
               className="border border-border rounded-2xl p-4 flex gap-4 items-center"
             >
               <img
-                src={p.image}
+                src={p.image_url ?? `https://picsum.photos/seed/${p.slug}/64/64`}
                 alt={p.title}
                 className="size-16 rounded-xl object-cover shrink-0"
               />
@@ -376,33 +600,57 @@ function OverviewTab() {
       <section className="mb-12">
         <SectionHeader title="Destinations" />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {destinations.map((d) => (
+          {overviewDestinations.map((d) => (
             <div key={d.slug} className="border border-border rounded-xl p-3 text-center">
               <img
-                src={d.image}
+                src={d.image_url ?? `https://picsum.photos/seed/${d.slug}/200/200`}
                 alt={d.name}
                 className="aspect-square w-full rounded-lg object-cover mb-2"
               />
               <div className="text-xs font-bold">{d.name}</div>
-              <div className="text-[10px] text-muted-foreground">{d.packagesCount} pkgs</div>
+              <div className="text-[10px] text-muted-foreground">{d.packages_count} pkgs</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* CSV templates */}
+      {/* CSV templates & bulk tools */}
       <section>
-        <SectionHeader title="CSV import templates" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SectionHeader title="CSV templates &amp; bulk import">
+          <button
+            onClick={() => api.adminExportCsv("packages")}
+            className="text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary"
+          >
+            <Download className="size-3" /> Export packages
+          </button>
+          <button
+            onClick={() => api.adminExportCsv("destinations")}
+            className="text-xs font-bold tracking-widest uppercase border border-border px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-secondary"
+          >
+            <Download className="size-3" /> Export destinations
+          </button>
+        </SectionHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <CsvCard
             name="packages.csv"
-            cols="title, destination, days, price, category, image, description"
-            sample="Bali Escape,Bali,5,49999,Honeymoon,image.jpg,Beautiful Bali package"
+            kind="packages"
+            cols="slug, title, location, days, price, category, image_url, tagline, description, rating, review_count, published"
+            sample="bali-escape,Bali Escape,Bali,5,49999,Honeymoon,https://…,Tropical paradise,…,4.9,120,true"
+            onImport={(f) => handleImport("packages", f)}
           />
           <CsvCard
             name="destinations.csv"
-            cols="slug, name, image, packagesCount, tagline"
-            sample="bali,Bali,bali.jpg,14,Tropical renewal"
+            kind="destinations"
+            cols="slug, name, image_url, packages_count, tagline, duration, price, rating, review_count"
+            sample="bali,Bali,https://…,14,Tropical renewal,5–10 days,35000,4.9,240"
+            onImport={(f) => handleImport("destinations", f)}
+          />
+          <CsvCard
+            name="planners.csv"
+            kind="planners"
+            cols="name, email, specialty, photo_url"
+            sample="Sophia Chen,sophia@journeymakers.com,Luxury Asia,https://…"
+            onImport={(f) => handleImport("planners", f)}
           />
         </div>
       </section>
@@ -459,6 +707,25 @@ const emptyDest = (): DestForm => ({
 function PackagesTab() {
   const qc = useQueryClient();
   const [section, setSection] = useState<"packages" | "destinations">("packages");
+
+  // ── Bulk import state ──
+  const [importStatus, setImportStatus] = useState<{
+    kind: string;
+    imported: number;
+    errors: { row: number; message: string }[];
+  } | null>(null);
+
+  async function handleImport(kind: string, file: File) {
+    setImportStatus(null);
+    try {
+      const result = await api.adminImportCsv(kind, file);
+      setImportStatus({ kind, ...result });
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      qc.invalidateQueries({ queryKey: ["destinations"] });
+    } catch (err) {
+      setImportStatus({ kind, imported: 0, errors: [{ row: 0, message: String(err) }] });
+    }
+  }
 
   // ── Packages state ──
   const pkgsQuery = useQuery({ queryKey: ["admin-packages"], queryFn: api.adminPackages });
@@ -533,10 +800,54 @@ function PackagesTab() {
     },
   });
 
+  // ── Bulk select ──
+  const pkgBulk = useBulkSelect(pkgs, (p) => p.slug);
+  const destBulk = useBulkSelect(dests, (d) => d.slug);
+
+  const bulkDeletePkgs = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("packages", ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      pkgBulk.clearSelection();
+    },
+  });
+  const bulkDeleteDests = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("destinations", ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["destinations"] });
+      destBulk.clearSelection();
+    },
+  });
+
   return (
     <>
+      <SessionBanner error={pkgsQuery.error as Error | null} />
+
+      {/* Import result banner */}
+      {importStatus && (
+        <div className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+          <div className="flex-1">
+            <span className="font-bold">
+              {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
+              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+            </span>
+            {importStatus.errors.length > 0 && (
+              <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
+                {importStatus.errors.slice(0, 5).map((e) => (
+                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                ))}
+                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {/* Section toggle */}
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex rounded-xl border border-border bg-secondary/30 p-1">
           {(["packages", "destinations"] as const).map((s) => (
             <button
@@ -553,28 +864,63 @@ function PackagesTab() {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() =>
-            section === "packages"
-              ? setPkgModal({ mode: "add", data: emptyPkg() })
-              : setDestModal({ mode: "add", data: emptyDest() })
-          }
-          className="flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background"
-        >
-          <Plus className="size-4" /> Add {section === "packages" ? "Package" : "Destination"}
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary">
+            <Upload className="size-3" /> Import CSV
+            <input type="file" accept=".csv,text/csv" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport(section, f); e.target.value = ""; } }} />
+          </label>
+          <button
+            onClick={() => api.adminExportCsv(section)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary"
+          >
+            <Download className="size-3" /> Export CSV
+          </button>
+          <a
+            href={api.csvTemplateUrl(section)}
+            download={`${section}_template.csv`}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary"
+          >
+            <Download className="size-3" /> Template
+          </a>
+          <button
+            type="button"
+            onClick={() =>
+              section === "packages"
+                ? setPkgModal({ mode: "add", data: emptyPkg() })
+                : setDestModal({ mode: "add", data: emptyDest() })
+            }
+            className="flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background"
+          >
+            <Plus className="size-4" /> Add {section === "packages" ? "Package" : "Destination"}
+          </button>
+        </div>
       </div>
 
       {/* ── Packages list ── */}
       {section === "packages" && (
-        <div className="grid gap-4">
+        <div className="space-y-3">
+          <BulkBar count={pkgBulk.selected.size} onClear={pkgBulk.clearSelection}>
+            <button
+              type="button"
+              disabled={bulkDeletePkgs.isPending}
+              onClick={() => bulkDeletePkgs.mutate(Array.from(pkgBulk.selected))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="size-3" /> Delete selected
+            </button>
+          </BulkBar>
           {pkgsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {pkgs.map((pkg) => (
             <div
               key={pkg.slug}
-              className="flex items-start gap-4 rounded-2xl border border-border bg-card p-4"
+              onClick={() => pkgBulk.toggleOne(pkg.slug)}
+              className={`flex items-start gap-3 rounded-2xl border bg-card p-4 cursor-pointer transition-colors ${pkgBulk.selected.has(pkg.slug) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
             >
+              <RowCheck
+                checked={pkgBulk.selected.has(pkg.slug)}
+                onToggle={() => pkgBulk.toggleOne(pkg.slug)}
+              />
               {pkg.image_url && (
                 <img
                   src={pkg.image_url}
@@ -605,7 +951,7 @@ function PackagesTab() {
                   </p>
                 )}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() =>
@@ -644,13 +990,28 @@ function PackagesTab() {
 
       {/* ── Destinations list ── */}
       {section === "destinations" && (
-        <div className="grid gap-4">
+        <div className="space-y-3">
+          <BulkBar count={destBulk.selected.size} onClear={destBulk.clearSelection}>
+            <button
+              type="button"
+              disabled={bulkDeleteDests.isPending}
+              onClick={() => bulkDeleteDests.mutate(Array.from(destBulk.selected))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="size-3" /> Delete selected
+            </button>
+          </BulkBar>
           {destsQuery.isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           {dests.map((dest) => (
             <div
               key={dest.slug}
-              className="flex items-start gap-4 rounded-2xl border border-border bg-card p-4"
+              onClick={() => destBulk.toggleOne(dest.slug)}
+              className={`flex items-start gap-3 rounded-2xl border bg-card p-4 cursor-pointer transition-colors ${destBulk.selected.has(dest.slug) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
             >
+              <RowCheck
+                checked={destBulk.selected.has(dest.slug)}
+                onToggle={() => destBulk.toggleOne(dest.slug)}
+              />
               {dest.image_url && (
                 <img
                   src={dest.image_url}
@@ -673,7 +1034,7 @@ function PackagesTab() {
                   <p className="mt-1 text-xs text-muted-foreground/70">{dest.tagline}</p>
                 )}
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() =>
@@ -1405,6 +1766,8 @@ function ReviewsTab() {
   const [editBody, setEditBody] = useState("");
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [flagReason, setFlagReason] = useState("");
+  const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
 
   const reviewsQuery = useQuery({
     queryKey: ["admin-reviews", filter],
@@ -1429,6 +1792,20 @@ function ReviewsTab() {
 
   const deleteMut = useMutation({
     mutationFn: api.adminDeleteReview,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-reviews"] }),
+  });
+
+  const replyMut = useMutation({
+    mutationFn: ({ id, reply }: { id: string; reply: string }) => api.adminReplyToReview(id, reply),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
+      setReplyingId(null);
+      setReplyText("");
+    },
+  });
+
+  const verifyMut = useMutation({
+    mutationFn: (id: string) => api.adminVerifyReview(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-reviews"] }),
   });
 
@@ -1574,8 +1951,18 @@ function ReviewsTab() {
                 updateMut.mutate({ id: review.public_id, payload: { status: "rejected" } })
               }
               onDelete={() => deleteMut.mutate(review.public_id)}
+              replying={replyingId === review.public_id}
+              replyText={replyText}
+              onReplyTextChange={setReplyText}
+              onStartReply={() => {
+                setReplyingId(review.public_id);
+                setReplyText((review as unknown as { admin_reply?: string }).admin_reply ?? "");
+              }}
+              onSaveReply={() => replyMut.mutate({ id: review.public_id, reply: replyText })}
+              onCancelReply={() => { setReplyingId(null); setReplyText(""); }}
+              onToggleVerify={() => verifyMut.mutate(review.public_id)}
               statusColor={statusColor}
-              loading={updateMut.isPending || deleteMut.isPending}
+              loading={updateMut.isPending || deleteMut.isPending || replyMut.isPending || verifyMut.isPending}
             />
           ))}
         </div>
@@ -1603,6 +1990,13 @@ function ReviewModerationCard({
   onApprove,
   onReject,
   onDelete,
+  replying,
+  replyText,
+  onReplyTextChange,
+  onStartReply,
+  onSaveReply,
+  onCancelReply,
+  onToggleVerify,
   statusColor,
   loading,
 }: {
@@ -1624,6 +2018,13 @@ function ReviewModerationCard({
   onApprove: () => void;
   onReject: () => void;
   onDelete: () => void;
+  replying: boolean;
+  replyText: string;
+  onReplyTextChange: (v: string) => void;
+  onStartReply: () => void;
+  onSaveReply: () => void;
+  onCancelReply: () => void;
+  onToggleVerify: () => void;
   statusColor: Record<string, string>;
   loading: boolean;
 }) {
@@ -1722,6 +2123,35 @@ function ReviewModerationCard({
             </div>
           )}
 
+          {/* Admin reply input */}
+          {replying && (
+            <div className="mt-3 space-y-2">
+              <textarea
+                autoFocus
+                value={replyText}
+                onChange={(e) => onReplyTextChange(e.target.value)}
+                rows={3}
+                placeholder="Write your reply as JourneyMakers…"
+                className="w-full resize-none rounded-xl border border-border bg-secondary/30 px-3 py-2 text-sm focus:border-accent focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={onSaveReply}
+                  disabled={loading || !replyText.trim()}
+                  className="rounded-full bg-foreground px-4 py-1.5 text-xs font-bold text-background hover:bg-accent disabled:opacity-50"
+                >
+                  Save reply
+                </button>
+                <button
+                  onClick={onCancelReply}
+                  className="rounded-full border border-border px-4 py-1.5 text-xs font-bold hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Date + action buttons */}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="font-mono text-[10px] text-muted-foreground">
@@ -1744,6 +2174,22 @@ function ReviewModerationCard({
                   className="inline-flex items-center gap-1 rounded-full bg-red-500 px-3 py-1 text-[11px] font-bold text-white hover:bg-red-600 disabled:opacity-50"
                 >
                   <X className="size-3" /> Reject
+                </button>
+              )}
+              <button
+                onClick={onToggleVerify}
+                disabled={loading}
+                className="inline-flex items-center gap-1 rounded-full border border-green-300 px-3 py-1 text-[11px] font-bold text-green-700 hover:bg-green-50 disabled:opacity-50"
+              >
+                <CheckCircle2 className="size-3" /> {(review as unknown as { verified?: boolean }).verified ? "Unverify" : "Verify"}
+              </button>
+              {!replying && (
+                <button
+                  onClick={onStartReply}
+                  disabled={loading}
+                  className="inline-flex items-center gap-1 rounded-full border border-blue-300 px-3 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                >
+                  <MessageSquare className="size-3" /> Reply
                 </button>
               )}
               {!flagging && (
@@ -1816,6 +2262,15 @@ function PlannersTab() {
     },
   });
 
+  const plannerBulk = useBulkSelect(planners, (p) => String(p.id));
+  const bulkDeletePlanners = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("planners", ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["planners"] });
+      plannerBulk.clearSelection();
+    },
+  });
+
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_PLANNER);
@@ -1844,6 +2299,17 @@ function PlannersTab() {
     <div>
       <SectionHeader title="Planners & staff">
         <span className="text-xs text-muted-foreground">{planners.length} planners</span>
+        <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary">
+          <Upload className="size-3" /> Import CSV
+          <input type="file" accept=".csv,text/csv" className="hidden"
+            onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await api.adminImportCsv("planners", f); qc.invalidateQueries({ queryKey: ["planners"] }); e.target.value = ""; } }} />
+        </label>
+        <button
+          onClick={() => api.adminExportCsv("planners")}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary"
+        >
+          <Download className="size-3" /> Export CSV
+        </button>
         <button
           onClick={openCreate}
           className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background hover:bg-accent"
@@ -1852,8 +2318,19 @@ function PlannersTab() {
         </button>
       </SectionHeader>
 
+      <BulkBar count={plannerBulk.selected.size} onClear={plannerBulk.clearSelection}>
+        <button
+          type="button"
+          disabled={bulkDeletePlanners.isPending}
+          onClick={() => bulkDeletePlanners.mutate(Array.from(plannerBulk.selected))}
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+        >
+          <Trash2 className="size-3" /> Delete selected
+        </button>
+      </BulkBar>
+
       {plannersQuery.isLoading ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="animate-pulse rounded-2xl border border-border h-28" />
           ))}
@@ -1861,9 +2338,17 @@ function PlannersTab() {
       ) : planners.length === 0 ? (
         <AdminEmptyState message="No planners yet. Add your first team member." />
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
           {planners.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-border p-5 flex gap-4 items-start">
+            <div
+              key={p.id}
+              onClick={() => plannerBulk.toggleOne(String(p.id))}
+              className={`rounded-2xl border p-5 flex gap-3 items-start cursor-pointer transition-colors ${plannerBulk.selected.has(String(p.id)) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
+            >
+              <RowCheck
+                checked={plannerBulk.selected.has(String(p.id))}
+                onToggle={() => plannerBulk.toggleOne(String(p.id))}
+              />
               {/* Avatar */}
               <div className="shrink-0">
                 {p.photo_url ? (
@@ -1880,7 +2365,7 @@ function PlannersTab() {
               </div>
 
               {/* Info */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                 <p className="font-extrabold tracking-tight">{p.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{p.email}</p>
                 {p.specialty && (
@@ -2078,18 +2563,1059 @@ function StatCard({
   );
 }
 
-function CsvCard({ name, cols, sample }: { name: string; cols: string; sample: string }) {
+function CsvCard({
+  name,
+  kind,
+  cols,
+  sample,
+  onImport,
+}: {
+  name: string;
+  kind: string;
+  cols: string;
+  sample: string;
+  onImport?: (file: File) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="border border-border rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
         <span className="font-mono text-sm font-bold">{name}</span>
-        <button className="text-xs font-bold tracking-widest uppercase inline-flex items-center gap-1 hover:text-accent">
-          <Download className="size-3" /> Template
-        </button>
+        <div className="flex items-center gap-2">
+          {onImport && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) { onImport(f); e.target.value = ""; }
+                }}
+              />
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="text-xs font-bold tracking-widest uppercase inline-flex items-center gap-1 hover:text-accent"
+              >
+                <Upload className="size-3" /> Import
+              </button>
+            </>
+          )}
+          <a
+            href={api.csvTemplateUrl(kind)}
+            download={`${kind}_template.csv`}
+            className="text-xs font-bold tracking-widest uppercase inline-flex items-center gap-1 hover:text-accent"
+          >
+            <Download className="size-3" /> Template
+          </a>
+        </div>
       </div>
       <div className="bg-secondary rounded-lg p-3 font-mono text-xs overflow-x-auto">
         <div className="text-muted-foreground">{cols}</div>
-        <div className="mt-1">{sample}</div>
+        <div className="mt-1 text-foreground/70">{sample}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Content tab — Services / FAQs / Testimonials / Site Stats ─────────────────
+
+function ContentTab() {
+  const [section, setSection] = useState<"services" | "faqs" | "testimonials" | "stats">("services");
+  const qc = useQueryClient();
+
+  // ── Bulk import state ──
+  const [importStatus, setImportStatus] = useState<{
+    kind: string;
+    imported: number;
+    errors: { row: number; message: string }[];
+  } | null>(null);
+
+  async function handleImport(kind: string, file: File) {
+    setImportStatus(null);
+    try {
+      const result = await api.adminImportCsv(kind, file);
+      setImportStatus({ kind, ...result });
+      qc.invalidateQueries({ queryKey: [kind] });
+    } catch (err) {
+      setImportStatus({ kind, imported: 0, errors: [{ row: 0, message: String(err) }] });
+    }
+  }
+
+  // ── Services ────────────────────────────────────────────────────────────────
+  const servicesQ = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const [editSvc, setEditSvc] = useState<Partial<ApiService> | null>(null);
+  const updateSvc = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ApiService> }) =>
+      api.updateService(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setEditSvc(null); },
+  });
+  const deleteSvc = useMutation({
+    mutationFn: (id: string) => api.deleteService(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+
+  // ── FAQs ────────────────────────────────────────────────────────────────────
+  const faqsQ = useQuery({ queryKey: ["faqs"], queryFn: api.faqs });
+  const [editFaq, setEditFaq] = useState<Partial<ApiFaq> | null>(null);
+  const createFaq = useMutation({
+    mutationFn: (data: { question: string; answer: string }) => api.createFaq(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); setEditFaq(null); },
+  });
+  const updateFaq = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ApiFaq> }) =>
+      api.updateFaq(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); setEditFaq(null); },
+  });
+  const deleteFaq = useMutation({
+    mutationFn: (id: number) => api.deleteFaq(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["faqs"] }),
+  });
+
+  // ── Testimonials ─────────────────────────────────────────────────────────────
+  const testimonialsQ = useQuery({ queryKey: ["testimonials"], queryFn: api.testimonials });
+  const [editTest, setEditTest] = useState<Partial<ApiTestimonial> | null>(null);
+  const createTest = useMutation({
+    mutationFn: (data: { name: string; role: string; quote: string; location?: string }) =>
+      api.createTestimonial(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); setEditTest(null); },
+  });
+
+  // ── Bulk select (after queries so data is available) ──
+  const svcBulk = useBulkSelect(servicesQ.data ?? [], (s) => s.id);
+  const faqBulk = useBulkSelect(faqsQ.data ?? [], (f) => String(f.id));
+  const testBulk = useBulkSelect(testimonialsQ.data ?? [], (t) => String(t.id));
+
+  const bulkDeleteSvcs = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("services", ids),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); svcBulk.clearSelection(); },
+  });
+  const bulkDeleteFaqs = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("faqs", ids),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); faqBulk.clearSelection(); },
+  });
+  const bulkDeleteTests = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("testimonials", ids),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); testBulk.clearSelection(); },
+  });
+  const updateTest = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<ApiTestimonial> }) =>
+      api.updateTestimonial(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); setEditTest(null); },
+  });
+  const deleteTest = useMutation({
+    mutationFn: (id: number) => api.deleteTestimonial(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["testimonials"] }),
+  });
+
+  // ── Site Stats ──────────────────────────────────────────────────────────────
+  const statsQ = useQuery({ queryKey: ["site-stats"], queryFn: api.siteStats });
+  const [statsEdit, setStatsEdit] = useState<ApiSiteStat[] | null>(null);
+  const saveStats = useMutation({
+    mutationFn: (items: ApiSiteStat[]) =>
+      api.updateSiteStats(items.map((s) => ({ value: s.value, label: s.label, sort_order: s.sort_order }))),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["site-stats"] }); setStatsEdit(null); },
+  });
+
+  const sectionTabs: { key: typeof section; label: string }[] = [
+    { key: "services", label: "Services" },
+    { key: "faqs", label: "FAQs" },
+    { key: "testimonials", label: "Testimonials" },
+    { key: "stats", label: "Site Stats" },
+  ];
+
+  return (
+    <div className="space-y-8">
+      <SessionBanner error={servicesQ.error as Error | null} />
+
+      {/* Import result banner */}
+      {importStatus && (
+        <div className={`rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+          <div className="flex-1">
+            <span className="font-bold">
+              {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
+              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+            </span>
+            {importStatus.errors.length > 0 && (
+              <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
+                {importStatus.errors.slice(0, 5).map((e) => (
+                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                ))}
+                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex gap-2 border-b border-border pb-1">
+        {sectionTabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setSection(t.key)}
+            className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${
+              section === t.key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Services ── */}
+      {section === "services" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold">Services ({servicesQ.data?.length ?? 0})</h3>
+            <div className="flex gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Upload className="size-3" /> Import CSV
+                <input type="file" accept=".csv,text/csv" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("services", f); e.target.value = ""; } }} />
+              </label>
+              <button onClick={() => api.adminExportCsv("services")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Download className="size-3" /> Export CSV
+              </button>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">Edit rating, description, and highlight copy for each service. These appear on the homepage and Services page.</p>
+          <BulkBar count={svcBulk.selected.size} onClear={svcBulk.clearSelection}>
+            <button
+              type="button"
+              disabled={bulkDeleteSvcs.isPending}
+              onClick={() => bulkDeleteSvcs.mutate(Array.from(svcBulk.selected))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="size-3" /> Delete selected
+            </button>
+          </BulkBar>
+          <div className="grid gap-3">
+            {servicesQ.data?.map((s) =>
+              editSvc?.id === s.id ? (
+                <div key={s.id} className="border border-accent rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Name</label>
+                      <input
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                        value={editSvc.name ?? ""}
+                        onChange={(e) => setEditSvc((v) => ({ ...v!, name: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase text-muted-foreground">Rating</label>
+                      <input
+                        type="number" min="0" max="5" step="0.1"
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                        value={editSvc.rating ?? 5}
+                        onChange={(e) => setEditSvc((v) => ({ ...v!, rating: parseFloat(e.target.value) }))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Description</label>
+                    <textarea
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      rows={2}
+                      value={editSvc.description ?? ""}
+                      onChange={(e) => setEditSvc((v) => ({ ...v!, description: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">Highlight quote</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                      value={editSvc.highlight ?? ""}
+                      onChange={(e) => setEditSvc((v) => ({ ...v!, highlight: e.target.value }))}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateSvc.mutate({ id: s.id, data: { name: editSvc.name, description: editSvc.description, rating: editSvc.rating, highlight: editSvc.highlight } })}
+                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditSvc(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={s.id}
+                  onClick={() => svcBulk.toggleOne(s.id)}
+                  className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${svcBulk.selected.has(s.id) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
+                >
+                  <RowCheck checked={svcBulk.selected.has(s.id)} onToggle={() => svcBulk.toggleOne(s.id)} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold">{s.name}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{s.description}</div>
+                    <div className="text-xs text-accent mt-1">★ {s.rating.toFixed(1)} · {s.review_count} reviews · "{s.highlight}"</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setEditSvc({ ...s })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
+                    <button onClick={() => deleteSvc.mutate(s.id)} className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── FAQs ── */}
+      {section === "faqs" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-lg font-bold">FAQs ({faqsQ.data?.length ?? 0})</h3>
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Upload className="size-3" /> Import CSV
+                <input type="file" accept=".csv,text/csv" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("faqs", f); e.target.value = ""; } }} />
+              </label>
+              <button onClick={() => api.adminExportCsv("faqs")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Download className="size-3" /> Export CSV
+              </button>
+              <button
+                onClick={() => setEditFaq({ question: "", answer: "", sort_order: 0 })}
+                className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+              >
+                <Plus className="size-3.5" /> Add FAQ
+              </button>
+            </div>
+          </div>
+          {editFaq && !editFaq.id && (
+            <div className="border border-accent rounded-xl p-4 space-y-3">
+              <input placeholder="Question" className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editFaq.question ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))} />
+              <textarea placeholder="Answer" rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editFaq.answer ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))} />
+              <div className="flex gap-2">
+                <button onClick={() => createFaq.mutate({ question: editFaq.question!, answer: editFaq.answer! })}
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
+                <button onClick={() => setEditFaq(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+              </div>
+            </div>
+          )}
+          <BulkBar count={faqBulk.selected.size} onClear={faqBulk.clearSelection}>
+            <button
+              type="button"
+              disabled={bulkDeleteFaqs.isPending}
+              onClick={() => bulkDeleteFaqs.mutate(Array.from(faqBulk.selected))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="size-3" /> Delete selected
+            </button>
+          </BulkBar>
+          <div className="grid gap-3">
+            {faqsQ.data?.map((f) =>
+              editFaq?.id === f.id ? (
+                <div key={f.id} className="border border-accent rounded-xl p-4 space-y-3">
+                  <input className="w-full rounded-lg border border-border px-3 py-2 text-sm font-bold"
+                    value={editFaq.question ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))} />
+                  <textarea rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editFaq.answer ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <button onClick={() => updateFaq.mutate({ id: f.id, data: { question: editFaq.question, answer: editFaq.answer } })}
+                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
+                    <button onClick={() => setEditFaq(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={f.id}
+                  onClick={() => faqBulk.toggleOne(String(f.id))}
+                  className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${faqBulk.selected.has(String(f.id)) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
+                >
+                  <RowCheck checked={faqBulk.selected.has(String(f.id))} onToggle={() => faqBulk.toggleOne(String(f.id))} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold">{f.question}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{f.answer}</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setEditFaq({ ...f })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
+                    <button onClick={() => deleteFaq.mutate(f.id)} className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"><Trash2 className="size-3.5" /></button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Testimonials ── */}
+      {section === "testimonials" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-lg font-bold">Testimonials ({testimonialsQ.data?.length ?? 0})</h3>
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Upload className="size-3" /> Import CSV
+                <input type="file" accept=".csv,text/csv" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("testimonials", f); e.target.value = ""; } }} />
+              </label>
+              <button onClick={() => api.adminExportCsv("testimonials")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+                <Download className="size-3" /> Export CSV
+              </button>
+              <button
+                onClick={() => setEditTest({ name: "", role: "", quote: "", location: "" })}
+                className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+              >
+                <Plus className="size-3.5" /> Add Testimonial
+              </button>
+            </div>
+          </div>
+          {editTest && !editTest.id && (
+            <div className="border border-accent rounded-xl p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input placeholder="Name" className="rounded-lg border border-border px-3 py-2 text-sm"
+                  value={editTest.name ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))} />
+                <input placeholder="Role / Title" className="rounded-lg border border-border px-3 py-2 text-sm"
+                  value={editTest.role ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))} />
+              </div>
+              <textarea placeholder="Quote" rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editTest.quote ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))} />
+              <input placeholder="Location (optional)" className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editTest.location ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))} />
+              <div className="flex gap-2">
+                <button onClick={() => createTest.mutate({ name: editTest.name!, role: editTest.role!, quote: editTest.quote!, location: editTest.location })}
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
+                <button onClick={() => setEditTest(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+              </div>
+            </div>
+          )}
+          <div className="grid gap-3">
+            {testimonialsQ.data?.map((t) =>
+              editTest?.id === t.id ? (
+                <div key={t.id} className="border border-accent rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <input className="rounded-lg border border-border px-3 py-2 text-sm"
+                      value={editTest.name ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))} />
+                    <input className="rounded-lg border border-border px-3 py-2 text-sm"
+                      value={editTest.role ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))} />
+                  </div>
+                  <textarea rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editTest.quote ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))} />
+                  <input className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editTest.location ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))} />
+                  <div className="flex gap-2">
+                    <button onClick={() => updateTest.mutate({ id: t.id, data: { name: editTest.name, role: editTest.role, quote: editTest.quote, location: editTest.location } })}
+                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
+                    <button onClick={() => setEditTest(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  key={t.id}
+                  onClick={() => testBulk.toggleOne(String(t.id))}
+                  className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${testBulk.selected.has(String(t.id)) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
+                >
+                  <RowCheck checked={testBulk.selected.has(String(t.id))} onToggle={() => testBulk.toggleOne(String(t.id))} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold">{t.name}</div>
+                    <div className="text-xs text-accent">{t.role} · {t.location}</div>
+                    <div className="text-sm text-muted-foreground mt-2">"{t.quote}"</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => setEditTest({ ...t })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
+                    <button onClick={() => deleteTest.mutate(t.id)} className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"><Trash2 className="size-3.5" /></button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+          <BulkBar count={testBulk.selected.size} onClear={testBulk.clearSelection}>
+            <button
+              type="button"
+              disabled={bulkDeleteTests.isPending}
+              onClick={() => bulkDeleteTests.mutate(Array.from(testBulk.selected))}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="size-3" /> Delete selected
+            </button>
+          </BulkBar>
+        </div>
+      )}
+
+      {/* ── CSV Templates ── */}
+      {section !== "stats" && (
+        <div className="pt-4 border-t border-border">
+          <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3">CSV Templates</h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <CsvCard
+              name="services.csv"
+              kind="services"
+              cols="id, name, description, rating, review_count, highlight, sort_order"
+              sample="visa-concierge,Visa Concierge,End-to-end filing.,4.9,320,Zero rejections in 2024,1"
+            />
+            <CsvCard
+              name="faqs.csv"
+              kind="faqs"
+              cols="question, answer, sort_order"
+              sample="How far ahead to book?,3–6 months for peak season.,1"
+            />
+            <CsvCard
+              name="testimonials.csv"
+              kind="testimonials"
+              cols="name, role, quote, location, sort_order"
+              sample="Priya Sharma,Honeymooner · Bali,Magical experience.,Mumbai,1"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Site Stats ── */}
+      {section === "stats" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold">Site Stats</h3>
+            {statsEdit ? (
+              <div className="flex gap-2">
+                <button onClick={() => saveStats.mutate(statsEdit)}
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save All</button>
+                <button onClick={() => setStatsEdit(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setStatsEdit(statsQ.data ? [...statsQ.data] : [])}
+                className="rounded-full border border-border px-4 py-2 text-xs font-bold">Edit</button>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">These appear in the homepage stats strip.</p>
+          {(statsEdit ?? statsQ.data ?? []).map((stat, i) => (
+            <div key={stat.id} className="flex items-center gap-3 rounded-xl border border-border p-4">
+              {statsEdit ? (
+                <>
+                  <input className="w-24 rounded-lg border border-border px-3 py-2 text-sm font-black"
+                    value={statsEdit[i]?.value ?? ""}
+                    onChange={(e) => setStatsEdit((v) => v ? v.map((s, j) => j === i ? { ...s, value: e.target.value } : s) : v)} />
+                  <input className="flex-1 rounded-lg border border-border px-3 py-2 text-sm"
+                    value={statsEdit[i]?.label ?? ""}
+                    onChange={(e) => setStatsEdit((v) => v ? v.map((s, j) => j === i ? { ...s, label: e.target.value } : s) : v)} />
+                </>
+              ) : (
+                <>
+                  <div className="w-24 text-2xl font-black">{stat.value}</div>
+                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Offers tab ────────────────────────────────────────────────────────────────
+
+const EMPTY_OFFER: OfferPayload = {
+  title: "",
+  subtitle: "",
+  code: "",
+  description: "",
+  offer_type: "percent",
+  discount_value: 0,
+  badge_label: "Special Offer",
+  badge_color: "accent",
+  applies_to: "all",
+  is_active: true,
+  is_featured: false,
+  sort_order: 0,
+};
+
+const BADGE_COLOR_STYLES: Record<string, string> = {
+  accent: "bg-accent text-white",
+  red: "bg-red-500 text-white",
+  green: "bg-emerald-500 text-white",
+  gold: "bg-amber-400 text-amber-900",
+};
+
+function OffersTab() {
+  const qc = useQueryClient();
+  const [modal, setModal] = useState<{ mode: "add" | "edit"; id?: number; data: OfferPayload } | null>(null);
+  const offersQuery = useQuery({ queryKey: ["admin-offers"], queryFn: api.adminOffers });
+  const offers = offersQuery.data ?? [];
+
+  const createMut = useMutation({
+    mutationFn: (data: OfferPayload) => api.adminCreateOffer(data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); setModal(null); },
+  });
+  const updateMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<OfferPayload> }) => api.adminUpdateOffer(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); setModal(null); },
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => api.adminDeleteOffer(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); },
+  });
+
+  const [formData, setFormData] = useState<OfferPayload>(EMPTY_OFFER);
+
+  function openAdd() {
+    setFormData(EMPTY_OFFER);
+    setModal({ mode: "add", data: EMPTY_OFFER });
+  }
+
+  function openEdit(offer: ApiOffer) {
+    const data: OfferPayload = {
+      title: offer.title,
+      subtitle: offer.subtitle,
+      code: offer.code ?? "",
+      description: offer.description,
+      offer_type: offer.offer_type,
+      discount_value: offer.discount_value,
+      badge_label: offer.badge_label,
+      badge_color: offer.badge_color,
+      applies_to: offer.applies_to,
+      valid_from: offer.valid_from,
+      valid_until: offer.valid_until,
+      max_uses: offer.max_uses,
+      is_active: offer.is_active,
+      is_featured: offer.is_featured,
+      sort_order: offer.sort_order,
+    };
+    setFormData(data);
+    setModal({ mode: "edit", id: offer.id, data });
+  }
+
+  function handleSubmit() {
+    if (modal?.mode === "add") {
+      createMut.mutate(formData);
+    } else if (modal?.mode === "edit" && modal.id != null) {
+      updateMut.mutate({ id: modal.id, data: formData });
+    }
+  }
+
+  function formatDiscount(offer: ApiOffer) {
+    switch (offer.offer_type) {
+      case "percent": return `${offer.discount_value}% OFF`;
+      case "fixed": return `₹${offer.discount_value.toLocaleString()} OFF`;
+      case "free_upgrade": return "FREE UPGRADE";
+      case "flash": return `${offer.discount_value}% FLASH`;
+    }
+  }
+
+  return (
+    <div>
+      <SessionBanner error={offersQuery.error as Error | null} />
+
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold">Offers & Promotions</h3>
+          <p className="text-sm text-muted-foreground">{offers.length} offer{offers.length !== 1 ? "s" : ""} total</p>
+        </div>
+        <button
+          onClick={openAdd}
+          className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:bg-accent"
+        >
+          <Plus className="size-4" /> Add Offer
+        </button>
+      </div>
+
+      {offersQuery.isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="animate-pulse rounded-2xl border border-border p-5 h-28" />
+          ))}
+        </div>
+      ) : offers.length === 0 ? (
+        <AdminEmptyState message="No offers yet. Create one to get started." />
+      ) : (
+        <div className="space-y-3">
+          {offers.map((offer) => (
+            <div
+              key={offer.id}
+              className={`rounded-2xl border p-5 transition-colors ${offer.is_active ? "border-border" : "border-border/50 opacity-60"}`}
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${BADGE_COLOR_STYLES[offer.badge_color] ?? BADGE_COLOR_STYLES.accent}`}>
+                      {offer.badge_label}
+                    </span>
+                    <span className="text-xl font-black tracking-tighter">{formatDiscount(offer)}</span>
+                    {offer.is_featured && (
+                      <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-[10px] font-bold uppercase">Featured</span>
+                    )}
+                    {!offer.is_active && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">Inactive</span>
+                    )}
+                  </div>
+                  <p className="font-bold text-sm">{offer.title}</p>
+                  {offer.subtitle && <p className="text-xs text-accent font-semibold mt-0.5">{offer.subtitle}</p>}
+                  {offer.code && (
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">Code: {offer.code}</p>
+                  )}
+                  {offer.max_uses != null && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                        <span>{offer.current_uses} / {offer.max_uses} used</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-secondary overflow-hidden w-48">
+                        <div
+                          className="h-full rounded-full bg-accent transition-all"
+                          style={{ width: `${Math.min(100, (offer.current_uses / offer.max_uses) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {(offer.valid_from || offer.valid_until) && (
+                    <p className="mt-1 text-[10px] font-mono text-muted-foreground">
+                      {offer.valid_from && `From ${offer.valid_from}`}
+                      {offer.valid_from && offer.valid_until && " · "}
+                      {offer.valid_until && `Until ${offer.valid_until}`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => updateMut.mutate({ id: offer.id, data: { is_active: !offer.is_active } })}
+                    disabled={updateMut.isPending}
+                    className={`rounded-full px-3 py-1.5 text-xs font-bold border transition-colors ${offer.is_active ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50" : "border-border text-muted-foreground hover:bg-secondary"}`}
+                  >
+                    {offer.is_active ? "Active" : "Inactive"}
+                  </button>
+                  <button
+                    onClick={() => openEdit(offer)}
+                    className="rounded-full border border-border p-2 hover:bg-secondary"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => deleteMut.mutate(offer.id)}
+                    disabled={deleteMut.isPending}
+                    className="rounded-full border border-red-200 p-2 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      {modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setModal(null)} />
+          <div className="relative z-10 w-full max-w-xl rounded-2xl bg-background shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border p-6">
+              <h3 className="text-lg font-extrabold">{modal.mode === "add" ? "Create Offer" : "Edit Offer"}</h3>
+              <button onClick={() => setModal(null)} className="rounded-full p-1.5 hover:bg-secondary">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-6">
+              {/* Title */}
+              <div>
+                <label className="mb-1.5 block text-sm font-bold">Title <span className="text-red-500">*</span></label>
+                <input
+                  value={formData.title}
+                  onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
+                  className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  placeholder="e.g. Early Bird Special"
+                />
+              </div>
+              {/* Subtitle */}
+              <div>
+                <label className="mb-1.5 block text-sm font-bold">Subtitle</label>
+                <input
+                  value={formData.subtitle ?? ""}
+                  onChange={(e) => setFormData((f) => ({ ...f, subtitle: e.target.value }))}
+                  className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  placeholder="Short tagline"
+                />
+              </div>
+              {/* Offer type + discount */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Type</label>
+                  <select
+                    value={formData.offer_type}
+                    onChange={(e) => setFormData((f) => ({ ...f, offer_type: e.target.value as OfferPayload["offer_type"] }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  >
+                    <option value="percent">Percent</option>
+                    <option value="fixed">Fixed (₹)</option>
+                    <option value="free_upgrade">Free Upgrade</option>
+                    <option value="flash">Flash</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Discount value</label>
+                  <input
+                    type="number"
+                    value={formData.discount_value}
+                    onChange={(e) => setFormData((f) => ({ ...f, discount_value: Number(e.target.value) }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                    min="0"
+                  />
+                </div>
+              </div>
+              {/* Promo code */}
+              <div>
+                <label className="mb-1.5 block text-sm font-bold">Promo code</label>
+                <input
+                  value={formData.code ?? ""}
+                  onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value || undefined }))}
+                  className="w-full rounded-xl border border-border px-3 py-2.5 text-sm font-mono focus:border-accent focus:outline-none"
+                  placeholder="e.g. EARLYBIRD25"
+                />
+              </div>
+              {/* Badge */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Badge label</label>
+                  <input
+                    value={formData.badge_label ?? ""}
+                    onChange={(e) => setFormData((f) => ({ ...f, badge_label: e.target.value }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Badge color</label>
+                  <select
+                    value={formData.badge_color ?? "accent"}
+                    onChange={(e) => setFormData((f) => ({ ...f, badge_color: e.target.value as OfferPayload["badge_color"] }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  >
+                    <option value="accent">Accent (orange)</option>
+                    <option value="red">Red</option>
+                    <option value="green">Green</option>
+                    <option value="gold">Gold</option>
+                  </select>
+                </div>
+              </div>
+              {/* Valid from/until */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Valid from</label>
+                  <input
+                    type="date"
+                    value={formData.valid_from ?? ""}
+                    onChange={(e) => setFormData((f) => ({ ...f, valid_from: e.target.value || undefined }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold">Valid until</label>
+                  <input
+                    type="date"
+                    value={formData.valid_until ?? ""}
+                    onChange={(e) => setFormData((f) => ({ ...f, valid_until: e.target.value || undefined }))}
+                    className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  />
+                </div>
+              </div>
+              {/* Max uses */}
+              <div>
+                <label className="mb-1.5 block text-sm font-bold">Max uses (optional)</label>
+                <input
+                  type="number"
+                  value={formData.max_uses ?? ""}
+                  onChange={(e) => setFormData((f) => ({ ...f, max_uses: e.target.value ? Number(e.target.value) : undefined }))}
+                  className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                  placeholder="Leave empty for unlimited"
+                  min="1"
+                />
+              </div>
+              {/* Description */}
+              <div>
+                <label className="mb-1.5 block text-sm font-bold">Description</label>
+                <textarea
+                  value={formData.description ?? ""}
+                  onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                />
+              </div>
+              {/* Toggles */}
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active ?? true}
+                    onChange={(e) => setFormData((f) => ({ ...f, is_active: e.target.checked }))}
+                    className="rounded"
+                  />
+                  Active
+                </label>
+                <label className="flex items-center gap-2 text-sm font-bold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_featured ?? false}
+                    onChange={(e) => setFormData((f) => ({ ...f, is_featured: e.target.checked }))}
+                    className="rounded"
+                  />
+                  Featured
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-3 border-t border-border p-6">
+              <button
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-full border border-border py-2.5 text-sm font-bold hover:bg-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={createMut.isPending || updateMut.isPending || !formData.title.trim()}
+                className="flex-1 rounded-full bg-foreground py-2.5 text-sm font-bold text-background hover:bg-accent disabled:opacity-40"
+              >
+                {modal.mode === "add" ? "Create" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Pages tab (site content CMS) ──────────────────────────────────────────────
+
+function PagesTab() {
+  const qc = useQueryClient();
+  const { data: allContent } = useQuery({
+    queryKey: ["admin-content"],
+    queryFn: api.adminContent,
+  });
+
+  const [activePage, setActivePage] = useState<string>("home");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Local edits buffer: { "page.section.key": newValue }
+  const [edits, setEdits] = useState<Record<string, string>>({});
+
+  const pages = Object.keys(allContent ?? {});
+  const pageData = allContent?.[activePage] ?? {};
+
+  function getEditKey(section: string, key: string) {
+    return `${activePage}.${section}.${key}`;
+  }
+
+  function getValue(section: string, key: string): string {
+    const editKey = getEditKey(section, key);
+    if (editKey in edits) return edits[editKey];
+    return (allContent?.[activePage]?.[section]?.[key] as { value: string } | undefined)?.value ?? "";
+  }
+
+  function handleChange(section: string, key: string, value: string) {
+    setEdits((prev) => ({ ...prev, [getEditKey(section, key)]: value }));
+    setSaved(false);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    const updates = Object.entries(edits).map(([k, value]) => {
+      const [page, section, ...keyParts] = k.split(".");
+      return { page, section, key: keyParts.join("."), value };
+    });
+    try {
+      await api.adminUpdateContent(updates);
+      setEdits({});
+      setSaved(true);
+      // Invalidate all content caches
+      qc.invalidateQueries({ queryKey: ["content"] });
+      qc.invalidateQueries({ queryKey: ["admin-content"] });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const PAGE_LABELS: Record<string, string> = {
+    home: "Home",
+    footer: "Footer",
+    contact: "Contact",
+    packages: "Packages",
+    destinations: "Destinations",
+    services: "Services",
+    global: "Global / Brand",
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
+      {/* Page list */}
+      <div className="flex flex-col gap-1">
+        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Pages</p>
+        {pages.map((p) => (
+          <button
+            key={p}
+            onClick={() => { setActivePage(p); setEdits({}); setSaved(false); }}
+            className={`rounded-xl px-4 py-2.5 text-left text-sm font-bold transition-colors ${
+              activePage === p ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary"
+            }`}
+          >
+            {PAGE_LABELS[p] ?? p}
+          </button>
+        ))}
+      </div>
+
+      {/* Field editors */}
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="text-lg font-extrabold">{PAGE_LABELS[activePage] ?? activePage}</h3>
+          <div className="flex items-center gap-3">
+            {Object.keys(edits).length > 0 && (
+              <span className="text-xs text-muted-foreground">{Object.keys(edits).length} unsaved change{Object.keys(edits).length !== 1 ? "s" : ""}</span>
+            )}
+            {saved && <span className="text-xs font-bold text-green-600">✓ Saved</span>}
+            <button
+              onClick={handleSave}
+              disabled={saving || Object.keys(edits).length === 0}
+              className="rounded-full bg-foreground px-5 py-2 text-xs font-extrabold text-background transition-colors hover:bg-accent disabled:opacity-40"
+            >
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-8">
+          {Object.entries(pageData).map(([section, fields]) => (
+            <div key={section} className="rounded-2xl border border-border p-5">
+              <p className="mb-4 text-xs font-extrabold uppercase tracking-widest text-muted-foreground">
+                {section.replace(/_/g, " ")}
+              </p>
+              <div className="grid gap-4">
+                {Object.entries(fields as Record<string, { value: string; label: string; value_type: string; sort_order: number }>)
+                  .sort((a, b) => (a[1].sort_order ?? 0) - (b[1].sort_order ?? 0))
+                  .map(([key, meta]) => (
+                    <div key={key}>
+                      <label className="mb-1.5 block text-xs font-bold text-foreground/70">
+                        {meta.label || key}
+                      </label>
+                      {(meta.value_type === "text" && (getValue(section, key).length > 80 || key.includes("body") || key.includes("description") || key.includes("tagline") || key.includes("subtitle"))) ? (
+                        <textarea
+                          rows={3}
+                          value={getValue(section, key)}
+                          onChange={(e) => handleChange(section, key, e.target.value)}
+                          className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground resize-y"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={getValue(section, key)}
+                          onChange={(e) => handleChange(section, key, e.target.value)}
+                          className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground"
+                        />
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

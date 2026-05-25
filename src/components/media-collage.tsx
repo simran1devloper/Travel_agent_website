@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import type { GalleryItem } from "@/lib/mock-data";
+import type { ApiGalleryItem as GalleryItem } from "@/lib/api";
 
 type CollageProps = {
   items: GalleryItem[];

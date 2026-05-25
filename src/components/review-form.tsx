@@ -15,11 +15,19 @@ type Props = {
 export function ReviewForm({ packageSlug, packageTitle, open, onClose }: Props) {
   const qc = useQueryClient();
   const [rating, setRating] = useState(0);
+  const [title, setTitle] = useState("");
+  const [tripDate, setTripDate] = useState("");
   const [body, setBody] = useState("");
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
 
   const mutation = useMutation({
-    mutationFn: () => api.submitReview(packageSlug, { rating, body, media_urls: mediaUrls }),
+    mutationFn: () => api.submitReview(packageSlug, {
+      rating,
+      title: title.trim() || undefined,
+      body,
+      trip_date: tripDate || undefined,
+      media_urls: mediaUrls,
+    }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["reviews", packageSlug] });
@@ -48,6 +56,8 @@ export function ReviewForm({ packageSlug, packageTitle, open, onClose }: Props) 
     if (mutation.isPending) return;
     if (mutation.isSuccess) {
       setRating(0);
+      setTitle("");
+      setTripDate("");
       setBody("");
       setMediaUrls([]);
       mutation.reset();
@@ -122,6 +132,38 @@ export function ReviewForm({ packageSlug, packageTitle, open, onClose }: Props) 
                   <span className="text-xs text-red-400">Tap a star</span>
                 )}
               </div>
+            </div>
+
+            {/* When did you travel? */}
+            <div>
+              <label className="mb-2 block text-sm font-bold" htmlFor="trip-date">
+                When did you travel?{" "}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <input
+                id="trip-date"
+                type="month"
+                value={tripDate}
+                onChange={(e) => setTripDate(e.target.value)}
+                className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm focus:border-[#c76b2f] focus:outline-none"
+              />
+            </div>
+
+            {/* Review title */}
+            <div>
+              <label className="mb-2 block text-sm font-bold" htmlFor="review-title">
+                Review title{" "}
+                <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <input
+                id="review-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                maxLength={200}
+                placeholder="Summarize your experience in a sentence…"
+                className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-[#c76b2f] focus:outline-none"
+              />
             </div>
 
             {/* Review body */}

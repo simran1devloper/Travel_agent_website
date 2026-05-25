@@ -14,6 +14,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SigninRouteImport } from './routes/signin'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as PackagesRouteImport } from './routes/packages'
+import { Route as OffersRouteImport } from './routes/offers'
 import { Route as MemoriesRouteImport } from './routes/memories'
 import { Route as DestinationsRouteImport } from './routes/destinations'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -46,6 +47,11 @@ const ServicesRoute = ServicesRouteImport.update({
 const PackagesRoute = PackagesRouteImport.update({
   id: '/packages',
   path: '/packages',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OffersRoute = OffersRouteImport.update({
+  id: '/offers',
+  path: '/offers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoriesRoute = MemoriesRouteImport.update({
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
   '/signin': typeof SigninRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
   '/signin': typeof SigninRoute
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
   '/signin': typeof SigninRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/offers'
     | '/packages'
     | '/services'
     | '/signin'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/offers'
     | '/packages'
     | '/services'
     | '/signin'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/offers'
     | '/packages'
     | '/services'
     | '/signin'
@@ -192,6 +204,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DestinationsRoute: typeof DestinationsRoute
   MemoriesRoute: typeof MemoriesRoute
+  OffersRoute: typeof OffersRoute
   PackagesRoute: typeof PackagesRoute
   ServicesRoute: typeof ServicesRoute
   SigninRoute: typeof SigninRoute
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/packages'
       fullPath: '/packages'
       preLoaderRoute: typeof PackagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/offers': {
+      id: '/offers'
+      path: '/offers'
+      fullPath: '/offers'
+      preLoaderRoute: typeof OffersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memories': {
@@ -304,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DestinationsRoute: DestinationsRoute,
   MemoriesRoute: MemoriesRoute,
+  OffersRoute: OffersRoute,
   PackagesRoute: PackagesRoute,
   ServicesRoute: ServicesRoute,
   SigninRoute: SigninRoute,

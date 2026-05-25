@@ -12,11 +12,15 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
-import { destinations } from "@/lib/mock-data";
+import { MEDIA } from "@/config/media";
+import { api, type ApiDestination, type ApiGalleryItem } from "@/lib/api";
+import { useDestinationFilterState } from "@/lib/user-prefs";
+import { useContent } from "@/lib/use-content";
 
 export const Route = createFileRoute("/destinations")({
   head: () => ({
@@ -39,8 +43,50 @@ export const Route = createFileRoute("/destinations")({
   component: DestinationsPage,
 });
 
-type Destination = (typeof destinations)[number];
-type GalleryItem = Destination["gallery"][number];
+// ── Local types & mappers ──────────────────────────────────────────────────
+
+type GalleryItem = ApiGalleryItem;
+
+type Destination = {
+  slug: string;
+  name: string;
+  image: string;
+  packagesCount: number;
+  tagline?: string;
+  duration?: string;
+  price: number;
+  rating: number;
+  reviewCount: number;
+  gallery: GalleryItem[];
+};
+
+function galleryFallback(slug: string): GalleryItem[] {
+  return [
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-01/600/800`, caption: "Featured moment", author: "JourneyMakers traveler" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-02/800/600`, caption: "Local scene", author: "Verified traveler" },
+    { type: "video", src: `https://picsum.photos/seed/${slug}-reel/600/400`, caption: "Journey highlights", author: "Community moment" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-04/600/800`, caption: "Hidden gems", author: "JourneyMakers guide" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-05/800/600`, caption: "Local culture", author: "Featured traveler" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-06/600/800`, caption: "City exploration", author: "JourneyMakers experience" },
+  ];
+}
+
+function mapApiDestination(d: ApiDestination): Destination {
+  const gallery = (d.gallery ?? []).length > 0 ? (d.gallery as GalleryItem[]) : galleryFallback(d.slug);
+  return {
+    slug: d.slug,
+    name: d.name,
+    image: MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
+    packagesCount: d.packages_count,
+    tagline: d.tagline,
+    duration: d.duration,
+    price: d.price ?? 0,
+    rating: d.rating ?? 4.8,
+    reviewCount: d.review_count,
+    gallery,
+  };
+}
+
 
 const destinationProfiles: Record<
   string,
@@ -142,17 +188,22 @@ function DestinationsPage() {
 }
 
 function Hero() {
+  const { c } = useContent("destinations");
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapApiDestination),
+  });
+
   return (
     <section className="section-shell pb-14 pt-20 md:pb-20 md:pt-28">
       <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
         <div className="max-w-3xl">
-          <span className="eyebrow mb-6">124+ destinations, shared by travelers</span>
+          <span className="eyebrow mb-6">{c("hero", "eyebrow", "124+ destinations, shared by travelers")}</span>
           <h1 className="display-title mb-6 text-5xl md:text-7xl">
-            Discover places through people who have been there.
+            {c("hero", "title", "Discover places through people who have been there.")}
           </h1>
           <p className="body-copy text-lg">
-            Browse destinations by traveler memories, community favorites, and curated journeys you
-            can build from saved moments.
+            {c("hero", "body", "Browse destinations by traveler memories, community favorites, and curated journeys you can build from saved moments.")}
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <Metric value="12,400+" label="shared experiences" />
@@ -213,7 +264,46 @@ function Metric({ value, label }: { value: string; label: string }) {
   );
 }
 
+// Destination filter tags derived from destinationProfiles moods and names
+const DEST_FILTER_TAGS = [
+  { id: "all", label: "All" },
+  { id: "city", label: "City pulse" },
+  { id: "nature", label: "Nature" },
+  { id: "beach", label: "Beach & coast" },
+  { id: "culture", label: "Culture" },
+  { id: "alpine", label: "Alpine" },
+];
+
 function DestinationGrid() {
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapApiDestination),
+  });
+
+  const [activeFilter, setActiveFilter] = useDestinationFilterState();
+
+  // Real tag-based filtering using destination name/slug/tagline patterns
+  const filteredDestinations = destinations.filter((d) => {
+    if (activeFilter === "all") return true;
+    const searchable = `${d.name} ${d.slug} ${d.tagline ?? ""} ${destinationProfiles[d.slug]?.mood ?? ""} ${destinationProfiles[d.slug]?.bestFor ?? ""}`.toLowerCase();
+    if (activeFilter === "city") {
+      return searchable.includes("city") || searchable.includes("pulse") || searchable.includes("urban") || searchable.includes("nightlife") || d.slug === "bangkok-singapore" || d.slug === "newyork" || d.slug === "tokyo-seoul";
+    }
+    if (activeFilter === "nature") {
+      return searchable.includes("nature") || searchable.includes("mountain") || searchable.includes("adventure") || searchable.includes("river");
+    }
+    if (activeFilter === "beach") {
+      return searchable.includes("beach") || searchable.includes("coastal") || searchable.includes("coast") || searchable.includes("island") || d.slug === "salonei";
+    }
+    if (activeFilter === "culture") {
+      return searchable.includes("culture") || searchable.includes("art") || searchable.includes("temple") || searchable.includes("design") || searchable.includes("food");
+    }
+    if (activeFilter === "alpine") {
+      return searchable.includes("alpine") || searchable.includes("mountain") || searchable.includes("rail") || d.slug === "switzerland";
+    }
+    return true;
+  });
+
   return (
     <section className="bg-[#fbf8f3] py-18 md:py-24">
       <div className="section-shell">
@@ -228,11 +318,42 @@ function DestinationGrid() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:grid-cols-3">
-          {destinations.map((destination) => (
-            <DestinationCard key={destination.slug} destination={destination} />
+        {/* Filter tags */}
+        <div className="mb-8 flex flex-wrap gap-2">
+          {DEST_FILTER_TAGS.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => setActiveFilter(tag.id)}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                activeFilter === tag.id
+                  ? "border-[#c76b2f] bg-[#c76b2f] text-white"
+                  : "border-border bg-white/60 text-foreground hover:border-[#c76b2f]"
+              }`}
+            >
+              {tag.label}
+            </button>
           ))}
         </div>
+
+        {filteredDestinations.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border py-16 text-center">
+            <p className="font-bold text-foreground">No destinations match this filter.</p>
+            <button
+              type="button"
+              onClick={() => setActiveFilter("all")}
+              className="mt-4 rounded-full border border-border bg-white px-5 py-2 text-sm font-bold text-foreground hover:border-[#c76b2f] hover:text-[#c76b2f]"
+            >
+              Show all destinations
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:grid-cols-3">
+            {filteredDestinations.map((destination) => (
+              <DestinationCard key={destination.slug} destination={destination} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );
@@ -261,7 +382,7 @@ function DestinationCard({ destination }: { destination: Destination }) {
         <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
           <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
             <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
-              {destination.reviewCount}+ traveler moments
+              {destination.reviewCount ?? 0}+ traveler moments
             </span>
             <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
               {profile?.curated} curated experiences
@@ -304,12 +425,21 @@ function DestinationCard({ destination }: { destination: Destination }) {
 }
 
 function TravelerExperiences() {
-  const [activeSlug, setActiveSlug] = useState(destinations[0].slug);
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapApiDestination),
+  });
+  const [activeSlug, setActiveSlug] = useState("");
+  useEffect(() => {
+    if (activeSlug === "" && destinations.length > 0) {
+      setActiveSlug(destinations[0].slug);
+    }
+  }, [destinations, activeSlug]);
   const [activeFilter, setActiveFilter] = useState(filters[0].id);
   const active =
     destinations.find((destination) => destination.slug === activeSlug) ?? destinations[0];
-  const profile = destinationProfiles[active.slug];
-  const gallery = useMemo(() => active.gallery, [active]);
+  const profile = destinationProfiles[active?.slug ?? ""];
+  const gallery = useMemo(() => active?.gallery ?? [], [active]);
   const [featured, ...supporting] = gallery;
 
   return (
@@ -322,7 +452,7 @@ function TravelerExperiences() {
           </div>
           <div className="rounded-2xl border border-border bg-white/50 px-5 py-4 text-sm font-semibold text-muted-foreground">
             <span className="mr-2 inline-block size-2 rounded-full bg-accent" />
-            {active.reviewCount}+ photos, videos, and traveler tips from {active.name}
+            {active?.reviewCount ?? 0}+ photos, videos, and traveler tips from {active?.name ?? ""}
           </div>
         </div>
 
@@ -337,7 +467,7 @@ function TravelerExperiences() {
                   : "border border-border bg-white/46 text-muted-foreground hover:text-foreground"
               }`}
             >
-              {destination.name} · {destination.reviewCount}
+              {destination.name} · {destination.reviewCount ?? 0}
             </button>
           ))}
         </div>

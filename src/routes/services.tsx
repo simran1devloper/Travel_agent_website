@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/page-shell";
 import { MediaStrip } from "@/components/media-collage";
-import { services, serviceGallery } from "@/lib/mock-data";
+import { api } from "@/lib/api";
+import { useContent } from "@/lib/use-content";
 
 export const Route = createFileRoute("/services")({
   head: () => ({
@@ -23,28 +25,53 @@ export const Route = createFileRoute("/services")({
 });
 
 function ServicesPage() {
+  const { c } = useContent("services");
+  const servicesQuery = useQuery({
+    queryKey: ["services"],
+    queryFn: api.services,
+  });
+
+  const services = servicesQuery.data ?? [];
+
+  if (servicesQuery.isLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-4xl px-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="h-40 rounded-2xl bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  );
+
+  // Build service gallery from services that have gallery items
+  const serviceGallery = services.flatMap((s) =>
+    s.gallery.map((g) => ({ src: g.src, caption: g.caption, service: s.name })),
+  );
+
   return (
     <PageShell
-      eyebrow="What we orchestrate"
-      title="Twelve services. One concierge."
-      description="From visa filings to private aviation, every detail handled by a single planner."
+      eyebrow={c("hero", "eyebrow", "What we orchestrate")}
+      title={c("hero", "title", "Twelve services. One concierge.")}
+      description={c("hero", "body", "From visa filings to private aviation, every detail handled by a single planner.")}
     >
-      <div className="mt-8 mb-10">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <span className="font-mono text-xs text-accent uppercase tracking-[0.2em] block mb-1">
-              Seen by our travelers
+      {serviceGallery.length > 0 && (
+        <div className="mt-8 mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <span className="font-mono text-xs text-accent uppercase tracking-[0.2em] block mb-1">
+                Seen by our travelers
+              </span>
+              <p className="text-sm text-muted-foreground">
+                Real moments from every service — swipe to explore.
+              </p>
+            </div>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] hidden md:block">
+              Click any photo to expand
             </span>
-            <p className="text-sm text-muted-foreground">
-              Real moments from every service — swipe to explore.
-            </p>
           </div>
-          <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] hidden md:block">
-            Click any photo to expand
-          </span>
+          <MediaStrip items={serviceGallery} />
         </div>
-        <MediaStrip items={serviceGallery} />
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border border border-border rounded-2xl overflow-hidden">
         {services.map((s, i) => (
@@ -66,7 +93,7 @@ function ServicesPage() {
               <span className="text-amber-400">★</span>
               <span>{s.rating.toFixed(1)}</span>
               <span className="text-border">·</span>
-              <span>{s.reviewCount} reviews</span>
+              <span>{s.review_count} reviews</span>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed text-pretty mb-3">
               {s.description}

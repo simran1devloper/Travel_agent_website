@@ -23,11 +23,13 @@ import {
   Users,
   Wine,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { api } from "@/lib/api";
+import { useInquiryDraft, clearInquiryDraft } from "@/lib/user-prefs";
+import { loadHeroSearch, clearHeroSearch } from "@/lib/search-state";
 
 export const Route = createFileRoute("/booking")({
   head: () => ({
@@ -105,18 +107,75 @@ function BookingPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [step, setStep] = useState(0);
-  const [selectedDestinations, setSelectedDestinations] = useState<string[]>(["Japan"]);
-  const [selectedExperiences, setSelectedExperiences] = useState<string[]>(["food", "culture"]);
-  const [selectedStyles, setSelectedStyles] = useState<string[]>(["Luxury"]);
-  const [selectedBudget, setSelectedBudget] = useState("$5k-10k");
-  const [selectedInspiration, setSelectedInspiration] = useState<string[]>([
-    "Tokyo night food walk",
-    "Swiss alpine train ride",
+  const [submittedSummary, setSubmittedSummary] = useState<{
+    destinations: string[];
+    experiences: string[];
+    adults: number;
+    children: number;
+    budget: string;
+    styles: string[];
+  } | null>(null);
+
+  // ── Draft autosave — restores progress if user leaves and comes back ──────
+  const { draft, hasDraft, saveDraft, resetDraft } = useInquiryDraft();
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [showDraftBanner, setShowDraftBanner] = useState(hasDraft && !draftRestored);
+
+  // ── Hero search prefill — once, on mount ─────────────────────────────────
+  const heroSearch = loadHeroSearch();
+
+  const [step, setStep] = useState(hasDraft ? draft.step : 0);
+  const [selectedDestinations, setSelectedDestinations] = useState<string[]>(() => {
+    if (hasDraft) return draft.selectedDestinations;
+    if (heroSearch?.destination) return [heroSearch.destination];
+    return [];
+  });
+  const [selectedExperiences, setSelectedExperiences] = useState<string[]>(
+    hasDraft ? draft.selectedExperiences : [],
+  );
+  const [selectedStyles, setSelectedStyles] = useState<string[]>(
+    hasDraft ? draft.selectedStyles : [],
+  );
+  const [selectedBudget, setSelectedBudget] = useState(hasDraft ? draft.selectedBudget : "");
+  const [selectedInspiration, setSelectedInspiration] = useState<string[]>(
+    hasDraft ? draft.selectedInspiration : [],
+  );
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    hasDraft ? draft.selectedServices : [],
+  );
+  const [adults, setAdults] = useState(hasDraft ? draft.adults : 2);
+  const [children, setChildren] = useState(hasDraft ? draft.children : 0);
+
+  // Clear hero search after it's been consumed on first render
+  useEffect(() => {
+    if (heroSearch) clearHeroSearch();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Autosave draft whenever any field changes
+  useEffect(() => {
+    saveDraft({
+      step,
+      selectedDestinations,
+      selectedExperiences,
+      selectedStyles,
+      selectedBudget,
+      selectedInspiration,
+      selectedServices,
+      adults,
+      children,
+    });
+  }, [
+    step,
+    selectedDestinations,
+    selectedExperiences,
+    selectedStyles,
+    selectedBudget,
+    selectedInspiration,
+    selectedServices,
+    adults,
+    children,
+    saveDraft,
   ]);
-  const [selectedServices, setSelectedServices] = useState<string[]>(["Custom itinerary"]);
-  const [adults, setAdults] = useState(2);
-  const [children, setChildren] = useState(0);
 
   const steps = [
     { title: "Destination", label: "Where do you want to go?" },
@@ -132,13 +191,38 @@ function BookingPage() {
   };
 
   if (submitted) {
-    return <SubmittedState />;
+    return <SubmittedState summary={submittedSummary} />;
   }
 
   return (
     <>
       <SiteNav />
       <main className="min-h-screen bg-[linear-gradient(180deg,#f6f1ea_0%,#fbf8f3_42%,#eee6dc_100%)]">
+        {/* Draft restore banner */}
+        {showDraftBanner && (
+          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-2xl bg-[#0e1726] px-5 py-3 text-white shadow-xl">
+            <span className="text-sm font-semibold">
+              ✦ Draft restored — continue where you left off
+            </span>
+            <button
+              onClick={() => {
+                resetDraft();
+                setShowDraftBanner(false);
+                setStep(0);
+                setDraftRestored(true);
+              }}
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold hover:bg-white/20"
+            >
+              Start fresh
+            </button>
+            <button
+              onClick={() => setShowDraftBanner(false)}
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold hover:bg-white/20"
+            >
+              Got it ✓
+            </button>
+          </div>
+        )}
         <section className="section-shell pb-8 pt-20 md:pt-28">
           <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
             <div className="max-w-3xl">
@@ -240,6 +324,16 @@ function BookingPage() {
                     inspiration_links: String(data.get("inspiration_links") ?? ""),
                     trip_feel: String(data.get("trip_feel") ?? ""),
                   });
+                  // Capture snapshot before clearing draft
+                  setSubmittedSummary({
+                    destinations: selectedDestinations,
+                    experiences: selectedExperiences,
+                    adults,
+                    children,
+                    budget: selectedBudget,
+                    styles: selectedStyles,
+                  });
+                  clearInquiryDraft(); // wipe draft after successful submit
                   setSubmitted(true);
                 } catch (error) {
                   setSubmitError(
@@ -458,8 +552,13 @@ function BookingPage() {
                       />
                     </div>
                     {submitError && (
-                      <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                        {submitError}
+                      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+                        <p className="font-bold mb-1">Please check the following:</p>
+                        <ul className="list-disc pl-4 space-y-1">
+                          {submitError.split("; ").map((e, i) => (
+                            <li key={i}>{e}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                     <div className="rounded-2xl border border-border bg-white/54 p-5">
@@ -516,7 +615,57 @@ function BookingPage() {
   );
 }
 
-function SubmittedState() {
+function SubmittedState({
+  summary,
+}: {
+  summary: {
+    destinations: string[];
+    experiences: string[];
+    adults: number;
+    children: number;
+    budget: string;
+    styles: string[];
+  } | null;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  function handleDownloadPdf() {
+    if (!summary) return;
+    const lines = [
+      "JourneyMakers — Journey Brief",
+      "================================",
+      "",
+      `Destinations: ${summary.destinations.join(", ") || "Open to ideas"}`,
+      `Experiences: ${summary.experiences.join(", ") || "—"}`,
+      `Travel styles: ${summary.styles.join(", ") || "—"}`,
+      `Travelers: ${summary.adults} adult${summary.adults !== 1 ? "s" : ""}${summary.children > 0 ? `, ${summary.children} child${summary.children !== 1 ? "ren" : ""}` : ""}`,
+      `Budget: ${summary.budget || "—"}`,
+      "",
+      "A travel designer will respond within 24 hours.",
+      "journeymakers.travel",
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "journeymakers-brief.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleShareLink() {
+    const ref = `INQ-${Math.floor(Math.random() * 9000) + 1000}`;
+    const url = `https://journeymakers.travel/booking?ref=${ref}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // fallback: show prompt
+      window.prompt("Copy this link:", url);
+    }
+  }
+
   return (
     <>
       <SiteNav />
@@ -533,14 +682,79 @@ function SubmittedState() {
               A travel designer will respond within 24 hours with first ideas, route questions, and
               the moments we think belong in your itinerary.
             </p>
-            <a
-              href="https://wa.me/15551234567"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-12 items-center gap-2 rounded-full bg-accent px-6 text-sm font-bold text-white transition-transform hover:scale-[1.02]"
-            >
-              <MessageCircle className="size-4" /> Continue on WhatsApp
-            </a>
+
+            {/* Summary card */}
+            {summary && (
+              <div className="mb-8 rounded-2xl border border-border bg-white/60 p-5 text-left text-sm">
+                <p className="mb-3 text-xs font-extrabold uppercase tracking-widest text-accent">
+                  Your brief summary
+                </p>
+                <div className="grid gap-2">
+                  {summary.destinations.length > 0 && (
+                    <div className="flex gap-2">
+                      <span className="w-28 shrink-0 font-semibold text-muted-foreground">
+                        Destinations
+                      </span>
+                      <span className="font-bold">{summary.destinations.join(", ")}</span>
+                    </div>
+                  )}
+                  {summary.styles.length > 0 && (
+                    <div className="flex gap-2">
+                      <span className="w-28 shrink-0 font-semibold text-muted-foreground">
+                        Style
+                      </span>
+                      <span className="font-bold">{summary.styles.join(", ")}</span>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <span className="w-28 shrink-0 font-semibold text-muted-foreground">
+                      Travelers
+                    </span>
+                    <span className="font-bold">
+                      {summary.adults} adult{summary.adults !== 1 ? "s" : ""}
+                      {summary.children > 0
+                        ? `, ${summary.children} child${summary.children !== 1 ? "ren" : ""}`
+                        : ""}
+                    </span>
+                  </div>
+                  {summary.budget && (
+                    <div className="flex gap-2">
+                      <span className="w-28 shrink-0 font-semibold text-muted-foreground">
+                        Budget
+                      </span>
+                      <span className="font-bold">{summary.budget}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <a
+                href="https://wa.me/15551234567"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-12 items-center gap-2 rounded-full bg-accent px-6 text-sm font-bold text-white transition-transform hover:scale-[1.02]"
+              >
+                <MessageCircle className="size-4" /> Continue on WhatsApp
+              </a>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="inline-flex min-h-12 items-center gap-2 rounded-full border border-border bg-white px-6 text-sm font-bold text-foreground transition-all hover:-translate-y-0.5 hover:bg-[#f7f2ea]"
+              >
+                <ArrowRight className="size-4 rotate-90" /> Download brief
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleShareLink();
+                }}
+                className="inline-flex min-h-12 items-center gap-2 rounded-full border border-border bg-white px-6 text-sm font-bold text-foreground transition-all hover:-translate-y-0.5 hover:bg-[#f7f2ea]"
+              >
+                {copied ? "✓ Copied!" : "Share link"}
+              </button>
+            </div>
           </motion.div>
         </section>
       </main>

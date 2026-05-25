@@ -7,7 +7,6 @@ import { ReviewForm } from "@/components/review-form";
 import { MemoryForm } from "@/components/memory-form";
 import { StarRating } from "@/components/star-rating";
 import { useLocalAuth } from "@/components/auth-provider";
-import { packages } from "@/lib/mock-data";
 import { api, type ApiReview, type ApiMemory } from "@/lib/api";
 import { AUTH0_ENABLED } from "@/lib/auth-config";
 import {
@@ -85,38 +84,20 @@ function DashboardContent() {
   const dashboardQuery = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
   const data = dashboardQuery.data;
 
-  const wishlist = data?.wishlist.length
-    ? data.wishlist.map((item) => ({
-        slug: item.slug,
-        title: item.title,
-        image: item.image_url ?? packages[0].image,
-        days: item.days,
-        price: item.price,
-      }))
-    : packages.slice(0, 3);
+  const wishlist = data?.wishlist.map((item) => ({
+    slug: item.slug,
+    title: item.title,
+    image: item.image_url ?? "",
+    days: item.days,
+    price: item.price,
+  })) ?? [];
 
-  const recentInquiries = data?.inquiries.length
-    ? data.inquiries.map((item) => ({
-        id: item.public_id,
-        destination: item.destinations?.[0] ?? "Custom journey",
-        status: item.status,
-        date: new Date(item.created_at).toLocaleDateString(),
-      }))
-    : [
-        {
-          id: "INQ-2034",
-          destination: "Kyoto, Japan",
-          status: "Planner assigned",
-          date: "Apr 12, 2026",
-        },
-        {
-          id: "INQ-2018",
-          destination: "Maldives",
-          status: "Itinerary draft",
-          date: "Mar 28, 2026",
-        },
-        { id: "INQ-1992", destination: "Iceland", status: "Completed", date: "Feb 02, 2026" },
-      ];
+  const recentInquiries = data?.inquiries.map((item) => ({
+    id: item.public_id,
+    destination: item.destinations?.[0] ?? "Custom journey",
+    status: item.status,
+    date: new Date(item.created_at).toLocaleDateString(),
+  })) ?? [];
 
   const reviews: ApiReview[] = data?.reviews ?? [];
   const memories: ApiMemory[] = data?.memories ?? [];
@@ -169,27 +150,36 @@ function DashboardContent() {
 
           <section className="mb-16">
             <h2 className="text-2xl font-bold tracking-tighter mb-6">Recent inquiries</h2>
-            <div className="border border-border rounded-2xl overflow-hidden">
-              {recentInquiries.map((i, idx) => (
-                <div
-                  key={i.id}
-                  className={`flex flex-wrap items-center justify-between gap-4 p-5 ${idx > 0 ? "border-t border-border" : ""}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <MapPin className="size-4 text-accent" />
-                    <div>
-                      <div className="font-bold">{i.destination}</div>
-                      <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
-                        {i.id} · {i.date}
+            {recentInquiries.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+                <MapPin className="mx-auto mb-3 size-8 text-muted-foreground/40" />
+                <p className="font-bold">No journey briefs yet</p>
+                <p className="mt-1 text-sm text-muted-foreground">Plan your first trip and track its progress here.</p>
+                <Link to="/booking" className="mt-4 inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-2 text-sm font-bold text-background">Plan a journey</Link>
+              </div>
+            ) : (
+              <div className="border border-border rounded-2xl overflow-hidden">
+                {recentInquiries.map((i, idx) => (
+                  <div
+                    key={i.id}
+                    className={`flex flex-wrap items-center justify-between gap-4 p-5 ${idx > 0 ? "border-t border-border" : ""}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <MapPin className="size-4 text-accent" />
+                      <div>
+                        <div className="font-bold">{i.destination}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
+                          {i.id} · {i.date}
+                        </div>
                       </div>
                     </div>
+                    <span className="text-xs px-3 py-1 rounded-full bg-secondary font-medium">
+                      {i.status}
+                    </span>
                   </div>
-                  <span className="text-xs px-3 py-1 rounded-full bg-secondary font-medium">
-                    {i.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="mb-16">
@@ -202,29 +192,44 @@ function DashboardContent() {
                 Add more
               </Link>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {wishlist.map((p) => (
-                <div key={p.slug} className="border border-border rounded-2xl overflow-hidden">
-                  <div className="aspect-[4/3] overflow-hidden">
-                    <img
-                      src={p.image}
-                      alt={p.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="p-5">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-bold">{p.title}</h3>
-                      <Heart className="size-4 text-accent fill-accent" />
+            {wishlist.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-10 text-center">
+                <Heart className="mx-auto mb-3 size-8 text-muted-foreground/40" />
+                <p className="font-bold">No saved journeys yet</p>
+                <p className="mt-1 text-sm text-muted-foreground">Browse packages and save the ones you love.</p>
+                <Link to="/packages" className="mt-4 inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2 text-sm font-bold text-white">Explore packages</Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {wishlist.map((p) => (
+                  <div key={p.slug} className="border border-border rounded-2xl overflow-hidden">
+                    <div className="aspect-[4/3] overflow-hidden">
+                      {p.image ? (
+                        <img
+                          src={p.image}
+                          alt={p.title}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-secondary flex items-center justify-center">
+                          <Heart className="size-8 text-muted-foreground/30" />
+                        </div>
+                      )}
                     </div>
-                    <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
-                      {p.days} days · ${p.price.toLocaleString()}
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-bold">{p.title}</h3>
+                        <Heart className="size-4 text-accent fill-accent" />
+                      </div>
+                      <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
+                        {p.days} days · ${p.price.toLocaleString()}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -22,21 +22,65 @@ import {
   Bookmark,
   Sparkles,
   Quote,
+  Zap,
+  Tag,
+  Gift,
+  Clock,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { saveHeroSearch } from "@/lib/search-state";
+import { type ApiOffer } from "@/lib/api";
+import { useContent } from "@/lib/use-content";
 import { MEDIA } from "@/config/media";
-import {
-  packages,
-  destinations,
-  services,
-  testimonials,
-  faqs,
-  stats,
-  communityReviews,
-} from "@/lib/mock-data";
+import { api, type ApiPackage, type ApiDestination, type ApiGalleryItem } from "@/lib/api";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
+
+// ── Shape mappers ─────────────────────────────────────────────────────────────
+
+type GalleryItem = ApiGalleryItem;
+
+function galleryFallback(slug: string): GalleryItem[] {
+  return [
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-01/600/800`, caption: "Featured moment", author: "JourneyMakers traveler" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-02/800/600`, caption: "Local scene", author: "Verified traveler" },
+    { type: "video", src: `https://picsum.photos/seed/${slug}-reel/600/400`, caption: "Journey highlights", author: "Community moment" },
+    { type: "photo", src: `https://picsum.photos/seed/${slug}-04/600/800`, caption: "Hidden gems", author: "JourneyMakers guide" },
+  ];
+}
+
+type MappedPackage = {
+  slug: string; title: string; location: string; days: number; price: number;
+  category: string; image: string; tagline?: string; rating: number; reviewCount: number;
+};
+
+type MappedDestination = {
+  slug: string; name: string; image: string; packagesCount: number; tagline?: string;
+  duration?: string; price: number; rating: number; reviewCount: number;
+  gallery: GalleryItem[];
+};
+
+function mapPkg(p: ApiPackage): MappedPackage {
+  return {
+    slug: p.slug, title: p.title, location: p.location, days: p.days, price: p.price,
+    category: p.category ?? "Journey",
+    image: MEDIA.destinations?.[p.slug] ?? p.image_url ?? `https://picsum.photos/seed/${p.slug}/800/600`,
+    tagline: p.tagline, rating: p.rating ?? 4.8, reviewCount: p.review_count,
+  };
+}
+
+function mapDest(d: ApiDestination): MappedDestination {
+  return {
+    slug: d.slug, name: d.name,
+    image: MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
+    packagesCount: d.packages_count, tagline: d.tagline, duration: d.duration,
+    price: d.price ?? 0, rating: d.rating ?? 4.8, reviewCount: d.review_count,
+    gallery: (d.gallery ?? []).length > 0 ? (d.gallery as GalleryItem[]) : galleryFallback(d.slug),
+  };
+}
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -76,6 +120,7 @@ function HomePage() {
       <main className="relative">
         <Hero />
         <StatsStrip />
+        <OffersStrip />
         <CinematicMoment />
         <FeaturedPackages />
         <ServicesSection />
@@ -93,6 +138,7 @@ function HomePage() {
 }
 
 function Hero() {
+  const { c } = useContent("home");
   return (
     <section className="relative flex min-h-[94vh] w-full flex-col justify-end overflow-hidden p-6 md:p-16">
       <video
@@ -116,17 +162,16 @@ function Hero() {
       >
         <div className="max-w-5xl">
           <span className="mb-5 inline-flex rounded-full border border-white/18 bg-black/20 px-4 py-2 text-xs font-bold uppercase tracking-normal text-white/78 backdrop-blur-xl">
-            Traveler-led luxury planning
+            {c("hero", "badge", "Traveler-led luxury planning")}
           </span>
           <p className="mb-4 max-w-2xl text-base font-semibold uppercase tracking-normal text-white/76">
-            Discover places through the moments travelers never stopped talking about.
+            {c("hero", "tagline", "Discover places through the moments travelers never stopped talking about.")}
           </p>
           <h1 className="mb-8 max-w-5xl text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_6px_34px_rgba(0,0,0,0.35)] md:text-7xl lg:text-8xl">
-            Build your journey from living memories.
+            {c("hero", "title", "Build your journey from living memories.")}
           </h1>
           <p className="mb-10 max-w-2xl text-base leading-8 text-white/86 md:text-lg">
-            Save cinematic traveler moments, feel the mood of every stop, then turn your collection
-            into a private itinerary with concierge support.
+            {c("hero", "subtitle", "Save cinematic traveler moments, feel the mood of every stop, then turn your collection into a private itinerary with concierge support.")}
           </p>
 
           <div className="mb-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
@@ -134,13 +179,13 @@ function Hero() {
               to="/booking"
               className="inline-flex min-h-14 items-center justify-center rounded-full bg-accent px-9 text-sm font-extrabold text-white shadow-[0_18px_50px_rgba(199,107,47,0.32)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_70px_rgba(199,107,47,0.42)] focus-ring"
             >
-              Start Collecting
+              {c("hero", "cta_primary", "Start Collecting")}
             </Link>
             <Link
               to="/packages"
               className="inline-flex min-h-14 items-center justify-center rounded-full border border-white/32 bg-white/8 px-9 text-sm font-bold text-white backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/14 focus-ring"
             >
-              View Journeys
+              {c("hero", "cta_secondary", "View Journeys")}
             </Link>
           </div>
 
@@ -152,12 +197,25 @@ function Hero() {
 }
 
 function SearchBar() {
+  const router = useRouter();
+  const [destination, setDestination] = useState("");
+  const [dates, setDates] = useState("");
+  const [travelers, setTravelers] = useState("");
+  const [budget, setBudget] = useState("");
+
+  function handlePlanJourney() {
+    saveHeroSearch({ destination, dates, travelers, budget });
+    void router.navigate({ to: "/booking" });
+  }
+
   return (
     <div className="grid w-full grid-cols-1 gap-2 rounded-2xl border border-white/22 bg-white/12 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.25)] backdrop-blur-2xl md:grid-cols-5">
       <FieldGroup icon={MapPin} label="Destination">
         <input
           type="text"
           placeholder="Where to?"
+          value={destination}
+          onChange={(e) => setDestination(e.target.value)}
           className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
         />
       </FieldGroup>
@@ -165,6 +223,8 @@ function SearchBar() {
         <input
           type="text"
           placeholder="Pick dates"
+          value={dates}
+          onChange={(e) => setDates(e.target.value)}
           className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
         />
       </FieldGroup>
@@ -172,6 +232,8 @@ function SearchBar() {
         <input
           type="text"
           placeholder="2 adults"
+          value={travelers}
+          onChange={(e) => setTravelers(e.target.value)}
           className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
         />
       </FieldGroup>
@@ -179,15 +241,18 @@ function SearchBar() {
         <input
           type="text"
           placeholder="$5k — $12k"
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
           className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
         />
       </FieldGroup>
-      <Link
-        to="/booking"
+      <button
+        type="button"
+        onClick={handlePlanJourney}
         className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-accent px-6 py-4 font-extrabold text-white transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(199,107,47,0.35)] active:scale-95 focus-ring"
       >
         Plan Journey <ArrowUpRight className="size-4" />
-      </Link>
+      </button>
     </div>
   );
 }
@@ -212,6 +277,21 @@ function FieldGroup({
 }
 
 function StatsStrip() {
+  const { data: stats = [], isLoading } = useQuery({
+    queryKey: ["site-stats"],
+    queryFn: api.siteStats,
+  });
+
+  if (isLoading) return (
+    <section className="border-y border-white/10 bg-[#0e1726] py-10">
+      <div className="section-shell grid grid-cols-2 gap-4 md:grid-cols-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-24 rounded-2xl bg-white/10 animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <section className="border-y border-white/10 bg-[#0e1726] py-10 text-background">
       <div className="section-shell grid grid-cols-2 gap-4 text-center md:grid-cols-4 md:gap-6">
@@ -231,35 +311,130 @@ function StatsStrip() {
   );
 }
 
+function useCountdownSimple(until: string | undefined) {
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
+  useEffect(() => {
+    if (!until) return;
+    const target = new Date(until).getTime();
+    function tick() {
+      const diff = target - Date.now();
+      if (diff <= 0) { setTimeLeft("Ended"); return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [until]);
+  return timeLeft;
+}
+
+function OffersStripCard({ offer }: { offer: ApiOffer }) {
+  const countdown = useCountdownSimple(offer.valid_until ?? undefined);
+  const isFlash = offer.offer_type === "flash";
+  const Icon = isFlash ? Zap : offer.offer_type === "fixed" ? Gift : Tag;
+  function formatDiscount() {
+    switch (offer.offer_type) {
+      case "percent": return `${offer.discount_value}% OFF`;
+      case "fixed": return `₹${offer.discount_value.toLocaleString()} OFF`;
+      case "free_upgrade": return "FREE UPGRADE";
+      case "flash": return `${offer.discount_value}% FLASH`;
+    }
+  }
+  return (
+    <Link
+      to="/offers"
+      className={`flex-shrink-0 w-72 rounded-2xl border p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${
+        isFlash ? "border-red-500/30 bg-red-500/5" : "border-border bg-card"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className={`size-4 ${isFlash ? "text-red-500" : "text-accent"}`} />
+        <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">{offer.badge_label}</span>
+      </div>
+      <div className={`text-2xl font-black tracking-tighter ${isFlash ? "text-red-500" : "text-foreground"}`}>
+        {formatDiscount()}
+      </div>
+      <p className="mt-1 text-sm font-bold line-clamp-1">{offer.title}</p>
+      {offer.subtitle && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{offer.subtitle}</p>}
+      {countdown && offer.valid_until && (
+        <div className="mt-3 flex items-center gap-1 text-[10px] font-mono text-red-600">
+          <Clock className="size-3" /> {countdown}
+        </div>
+      )}
+    </Link>
+  );
+}
+
+function OffersStrip() {
+  const { data: offers } = useQuery({
+    queryKey: ["offers"],
+    queryFn: api.offers,
+  });
+
+  if (!offers || offers.length === 0) return null;
+
+  return (
+    <section className="bg-background border-y border-border py-8 overflow-hidden">
+      <div className="section-shell">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Zap className="size-5 text-accent" />
+            <span className="text-sm font-extrabold uppercase tracking-widest">Live Offers</span>
+          </div>
+          <Link to="/offers" className="text-sm font-bold text-accent hover:underline flex items-center gap-1">
+            View all <ArrowUpRight className="size-3.5" />
+          </Link>
+        </div>
+        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+          {offers.map((offer) => (
+            <OffersStripCard key={offer.id} offer={offer} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function CinematicMoment() {
+  const { c } = useContent("home");
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapDest),
+  });
   const moment = destinations.find((d) => d.slug === "switzerland") ?? destinations[0];
-  const quote = moment.gallery[0];
+  const quote = moment?.gallery[0];
 
   return (
     <section className="relative min-h-[78vh] overflow-hidden bg-[#0e1726] text-white">
       <img
-        src={MEDIA.destinations?.[moment.slug] ?? moment.image}
-        alt={moment.name}
+        src={moment?.image ?? MEDIA.heroPoster}
+        alt={moment?.name ?? "JourneyMakers"}
         className="absolute inset-0 h-full w-full object-cover"
       />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,23,38,0.82),rgba(14,23,38,0.38)_46%,rgba(14,23,38,0.1)),linear-gradient(180deg,rgba(14,23,38,0.12),rgba(14,23,38,0.76))]" />
       <div className="relative flex min-h-[78vh] items-end px-6 py-16 md:px-12 lg:px-20">
         <div className="max-w-4xl">
           <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-extrabold backdrop-blur-md">
-            <Sparkles className="size-4 text-[#d7aa73]" /> Cinematic Moment
+            <Sparkles className="size-4 text-[#d7aa73]" /> {c("cinematic_moment", "badge", "Cinematic Moment")}
           </div>
           <h2 className="mb-8 text-balance text-5xl font-black leading-[1.02] md:text-7xl">
-            One saved memory can become the reason for the whole journey.
+            {c("cinematic_moment", "title", "One saved memory can become the reason for the whole journey.")}
           </h2>
-          <figure className="max-w-2xl border-l border-white/30 pl-6">
-            <Quote className="mb-4 size-8 text-[#d7aa73]" />
-            <blockquote className="text-2xl font-semibold leading-10 text-white/90">
-              "{quote.caption} felt like the world went quiet for a few minutes."
-            </blockquote>
-            <figcaption className="mt-5 text-sm font-bold text-white/68">
-              {quote.author} · Visited Apr 2026
-            </figcaption>
-          </figure>
+          {quote && (
+            <figure className="max-w-2xl border-l border-white/30 pl-6">
+              <Quote className="mb-4 size-8 text-[#d7aa73]" />
+              <blockquote className="text-2xl font-semibold leading-10 text-white/90">
+                "{quote.caption} {c("cinematic_moment", "quote_suffix", "felt like the world went quiet for a few minutes.")}"
+              </blockquote>
+              <figcaption className="mt-5 text-sm font-bold text-white/68">
+                {quote.author} · Visited Apr 2026
+              </figcaption>
+            </figure>
+          )}
         </div>
       </div>
     </section>
@@ -267,6 +442,21 @@ function CinematicMoment() {
 }
 
 function FeaturedPackages() {
+  const { data: packages = [], isLoading } = useQuery({
+    queryKey: ["packages"],
+    queryFn: async () => (await api.packages()).map(mapPkg),
+  });
+
+  if (isLoading) return (
+    <section className="section-shell py-24 md:py-30">
+      <div className="grid grid-cols-1 gap-7 md:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-[420px] rounded-2xl bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <section className="section-shell py-24 md:py-30">
       <div className="mb-14 grid gap-8 md:grid-cols-[0.9fr_1.1fr] md:items-end">
@@ -317,7 +507,7 @@ function FeaturedPackages() {
                 <div className="absolute bottom-5 left-5 right-5 text-white">
                   <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-white/14 px-3 py-1.5 text-sm font-bold backdrop-blur-md">
                     <Star className="size-3.5 fill-[#d7aa73] text-[#d7aa73]" />{" "}
-                    {p.rating.toFixed(1)} · {p.reviewCount}
+                    {(p.rating ?? 4.8).toFixed(1)} · {p.reviewCount ?? 0}
                   </div>
                   <h3 className="text-3xl font-black leading-tight">{p.title}</h3>
                 </div>
@@ -349,35 +539,50 @@ function FeaturedPackages() {
 }
 
 function ServicesSection() {
-  const featured = services.slice(0, 8);
+  const { c } = useContent("home");
+  const { data: allServices = [], isLoading } = useQuery({
+    queryKey: ["services"],
+    queryFn: api.services,
+  });
+
+  if (isLoading) return (
+    <section className="bg-[#0e1726] py-24 md:py-32">
+      <div className="section-shell grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+          <div key={i} className="h-48 rounded-2xl bg-white/10 animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
+  const featured = allServices.slice(0, 8);
   return (
     <section className="bg-[#0e1726] py-24 text-background md:py-32">
       <div className="section-shell grid grid-cols-1 gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
         <div className="lg:sticky lg:top-28">
-          <span className="eyebrow mb-4 text-[#d7aa73]">What we orchestrate</span>
+          <span className="eyebrow mb-4 text-[#d7aa73]">{c("services_section", "eyebrow", "What we orchestrate")}</span>
           <h2 className="display-title mb-8 text-4xl text-white md:text-6xl">
-            Beyond the itinerary.
+            {c("services_section", "title", "Beyond the itinerary.")}
           </h2>
           <p className="mb-8 max-w-md text-lg leading-9 text-background/70">
-            We do not just book flights. We orchestrate transitions between worlds: visas, jets,
-            private chefs, and the moments in between.
+            {c("services_section", "description", "We do not just book flights. We orchestrate transitions between worlds: visas, jets, private chefs, and the moments in between.")}
           </p>
           <div className="mb-8 grid gap-3 text-sm text-background/76">
             <span className="inline-flex items-center gap-2">
-              <ShieldCheck className="size-4 text-[#d7aa73]" /> Emergency desk in every itinerary
+              <ShieldCheck className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_1", "Emergency desk in every itinerary")}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Globe2 className="size-4 text-[#d7aa73]" /> Local specialists across 124 destinations
+              <Globe2 className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_2", "Local specialists across 124 destinations")}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Clock3 className="size-4 text-[#d7aa73]" /> Real-time trip changes handled quietly
+              <Clock3 className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_3", "Real-time trip changes handled quietly")}
             </span>
           </div>
           <Link
             to="/services"
             className="inline-flex items-center gap-2 rounded-full border border-background/22 px-6 py-3 text-sm font-extrabold transition-all hover:-translate-y-0.5 hover:border-accent hover:bg-accent focus-ring"
           >
-            All services <ArrowUpRight className="size-4" />
+            {c("services_section", "cta_label", "All services")} <ArrowUpRight className="size-4" />
           </Link>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -395,7 +600,7 @@ function ServicesSection() {
                 <div className="mb-4 flex items-center gap-2 text-sm font-bold text-[#d7aa73]">
                   <Star className="size-4 fill-[#d7aa73]" />
                   <span>
-                    {s.rating.toFixed(1)} · {s.reviewCount} reviews
+                    {s.rating.toFixed(1)} · {s.review_count} reviews
                   </span>
                 </div>
                 <p className="text-base leading-8 text-background/68">{s.description}</p>
@@ -412,6 +617,11 @@ function ServicesSection() {
 }
 
 function DestinationStrip() {
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapDest),
+  });
+
   return (
     <section className="py-24 md:py-32">
       <div className="section-shell mb-12 flex flex-col justify-between gap-6 md:flex-row md:items-end">
@@ -462,9 +672,9 @@ function DestinationStrip() {
             <div className="grid gap-4 bg-[#fbf8f3] p-5 text-foreground md:p-6">
               <div className="flex items-start justify-between gap-5">
                 <div>
-                  <p className="mb-1 text-base leading-7 text-muted-foreground">{d.review}</p>
+                  <p className="mb-1 text-base leading-7 text-muted-foreground">{d.tagline}</p>
                   <p className="text-sm font-bold text-[#8a6144]">
-                    {d.duration} · from ${d.price.toLocaleString()} · {d.rating.toFixed(1)} rating
+                    {d.duration} · from ${(d.price ?? 0).toLocaleString()} · {(d.rating ?? 4.8).toFixed(1)} rating
                   </p>
                 </div>
                 <ArrowUpRight className="mt-1 size-5 shrink-0 text-accent transition-transform group-hover:translate-x-1" />
@@ -502,10 +712,15 @@ function DestinationStrip() {
 }
 
 function MomentCollector() {
+  const { data: destinations = [] } = useQuery({
+    queryKey: ["destinations"],
+    queryFn: async () => (await api.destinations()).map(mapDest),
+  });
+
   const moments = destinations.slice(0, 4).map((destination) => ({
     destination: destination.name,
-    image: MEDIA.destinations?.[destination.slug] ?? destination.image,
-    caption: destination.gallery[0]?.caption ?? destination.tagline,
+    image: destination.image,
+    caption: destination.gallery[0]?.caption ?? destination.tagline ?? "",
     author: destination.gallery[0]?.author ?? "JourneyMakers traveler",
   }));
   const [saved, setSaved] = useState<string[]>([moments[0]?.caption].filter(Boolean));
@@ -612,74 +827,74 @@ function MomentCollector() {
 }
 
 function ReviewBoard() {
+  const { c } = useContent("home");
+  const { data: reviews = [] } = useQuery({
+    queryKey: ["reviews"],
+    queryFn: api.getAllReviews,
+  });
+
   return (
     <section className="bg-[linear-gradient(180deg,#f6f1ea,#eee6dc)] py-24 md:py-32">
       <div className="section-shell">
         <div className="mb-14 flex flex-col items-start justify-between gap-6 lg:flex-row">
           <div className="max-w-3xl">
-            <span className="eyebrow mb-4">Traveler Board</span>
-            <h2 className="display-title mb-5 text-4xl md:text-6xl">Review, share, and inspire.</h2>
+            <span className="eyebrow mb-4">{c("review_board", "eyebrow", "Traveler Board")}</span>
+            <h2 className="display-title mb-5 text-4xl md:text-6xl">{c("review_board", "title", "Review, share, and inspire.")}</h2>
             <p className="body-copy text-lg">
-              Real travelers leave ratings, tips, photos and video notes for every destination,
-              package and service. It's a living guide that helps future journeys feel instantly
-              familiar.
+              {c("review_board", "body", "Real travelers leave ratings, tips, photos and video notes for every destination, package and service. It's a living guide that helps future journeys feel instantly familiar.")}
             </p>
           </div>
           <Link
             to="/destinations"
             className="inline-flex items-center gap-2 rounded-full border border-border bg-white/50 px-6 py-3 text-sm font-extrabold shadow-sm transition-all hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-ring"
           >
-            Browse all reviews
+            {c("review_board", "cta_label", "Browse all reviews")}
           </Link>
         </div>
         <div className="grid gap-6 lg:grid-cols-[1.45fr_0.9fr]">
           <div className="grid gap-6">
-            {communityReviews.map((review) => (
-              <article key={review.id} className="premium-card overflow-hidden rounded-2xl">
-                <div className="grid grid-cols-2 gap-3 p-4 md:p-5">
-                  {review.media.map((item, index) => (
-                    <div
-                      key={index}
-                      className={`group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-white/20 ${
-                        index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/3]"
-                      }`}
-                    >
-                      <img
-                        src={item.src}
-                        alt={item.label}
-                        loading="lazy"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                      {item.type === "video" && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-black/50 backdrop-blur-sm rounded-full p-2 border border-white/20 transition-transform duration-300 group-hover:scale-110">
-                            <Play className="size-3.5 text-white fill-white" />
-                          </div>
-                        </div>
-                      )}
-                      {item.type === "photo" && (
+            {reviews.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border py-12 text-center">
+                <p className="text-muted-foreground text-sm">No reviews yet. Be the first to share your experience.</p>
+              </div>
+            ) : reviews.slice(0, 3).map((review) => (
+              <article key={review.public_id} className="premium-card overflow-hidden rounded-2xl">
+                {review.media_urls?.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 p-4 md:p-5">
+                    {review.media_urls.slice(0, 3).map((url, index) => (
+                      <div
+                        key={url}
+                        className={`group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-white/20 ${
+                          index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/3]"
+                        }`}
+                      >
+                        <img
+                          src={url.startsWith("/") ? `http://localhost:8000${url}` : url}
+                          alt={review.title ?? "Review photo"}
+                          loading="lazy"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                         <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Camera className="size-3 text-white" />
                         </div>
-                      )}
-                      <div className="absolute bottom-0 left-0 right-0 p-2">
-                        <p className="truncate text-xs font-bold text-white">{item.label}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
                 <div className="p-6 pt-2 md:p-8 md:pt-3">
                   <div className="mb-4 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="grid size-11 place-items-center rounded-full bg-[#0e1726] text-sm font-black text-white">
-                        {review.author[0]}
+                        {(review.customer_name ?? "T")[0]}
                       </div>
                       <div>
-                        <div className="font-extrabold">{review.author}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {review.location} · {review.date}
-                        </div>
+                        <div className="font-extrabold">{review.customer_name ?? "Traveler"}</div>
+                        {review.trip_date && (
+                          <div className="text-sm text-muted-foreground">
+                            Traveled {review.trip_date}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <span className="inline-flex items-center gap-2 font-extrabold text-[#9a6b45]">
@@ -687,11 +902,10 @@ function ReviewBoard() {
                       {review.rating.toFixed(1)}
                     </span>
                   </div>
-                  <h3 className="mb-3 text-2xl font-black text-foreground">{review.subject}</h3>
-                  <p className="mb-5 text-lg leading-9 text-muted-foreground">"{review.comment}"</p>
-                  <p className="border-l-2 border-accent pl-4 text-base font-semibold leading-8 text-foreground">
-                    {review.tip}
-                  </p>
+                  {review.title && (
+                    <h3 className="mb-3 text-2xl font-black text-foreground">{review.title}</h3>
+                  )}
+                  <p className="mb-5 text-lg leading-9 text-muted-foreground">"{review.body}"</p>
                 </div>
               </article>
             ))}
@@ -746,11 +960,27 @@ function ReviewBoard() {
 }
 
 function Testimonials() {
+  const { c } = useContent("home");
+  const { data: testimonials = [], isLoading } = useQuery({
+    queryKey: ["testimonials"],
+    queryFn: api.testimonials,
+  });
+
+  if (isLoading) return (
+    <section className="section-shell py-24 md:py-32">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <section className="section-shell py-24 md:py-32">
-      <span className="eyebrow mb-4">Field Notes</span>
+      <span className="eyebrow mb-4">{c("testimonials", "eyebrow", "Field Notes")}</span>
       <h2 className="display-title mb-14 max-w-3xl text-4xl md:text-6xl">
-        Whispered between travelers.
+        {c("testimonials", "title", "Whispered between travelers.")}
       </h2>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {testimonials.map((t, index) => (
@@ -798,20 +1028,36 @@ function Testimonials() {
 }
 
 function FaqSection() {
+  const { c } = useContent("home");
   const [open, setOpen] = useState<number | null>(0);
+  const { data: faqs = [], isLoading } = useQuery({
+    queryKey: ["faqs"],
+    queryFn: api.faqs,
+  });
+
+  if (isLoading) return (
+    <section className="section-shell py-24 md:py-32">
+      <div className="mx-auto max-w-4xl space-y-3">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
   return (
     <section className="section-shell py-24 md:py-32">
       <div className="mx-auto max-w-4xl">
-        <span className="eyebrow mb-4 text-center">Frequently Asked</span>
-        <h2 className="display-title mb-12 text-center text-4xl md:text-6xl">Quietly answered.</h2>
+        <span className="eyebrow mb-4 text-center">{c("faq_section", "eyebrow", "Frequently Asked")}</span>
+        <h2 className="display-title mb-12 text-center text-4xl md:text-6xl">{c("faq_section", "title", "Quietly answered.")}</h2>
         <div className="overflow-hidden rounded-2xl border border-border bg-white/42 shadow-[var(--shadow-soft)]">
           {faqs.map((f, i) => (
-            <div key={i} className="border-b border-border last:border-b-0">
+            <div key={f.id} className="border-b border-border last:border-b-0">
               <button
                 onClick={() => setOpen(open === i ? null : i)}
                 className="flex w-full items-center justify-between gap-6 px-5 py-6 text-left transition-colors hover:bg-white/55 focus-ring md:px-7"
               >
-                <span className="text-base font-extrabold leading-7 md:text-lg">{f.q}</span>
+                <span className="text-base font-extrabold leading-7 md:text-lg">{f.question}</span>
                 <ChevronDown
                   className={`size-5 shrink-0 transition-transform ${open === i ? "rotate-180" : ""}`}
                 />
@@ -823,7 +1069,7 @@ function FaqSection() {
                   exit={{ height: 0, opacity: 0 }}
                   className="px-5 pb-6 text-base leading-8 text-muted-foreground md:px-7"
                 >
-                  {f.a}
+                  {f.answer}
                 </motion.div>
               )}
             </div>
@@ -835,6 +1081,7 @@ function FaqSection() {
 }
 
 function NewsletterCTA() {
+  const { c } = useContent("home");
   return (
     <section className="relative min-h-[72vh] overflow-hidden bg-[#0e1726] px-6 py-20 text-white md:px-12 md:py-28">
       <video
@@ -849,14 +1096,13 @@ function NewsletterCTA() {
       </video>
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,23,38,0.86),rgba(14,23,38,0.42)_52%,rgba(14,23,38,0.74)),linear-gradient(180deg,rgba(14,23,38,0.18),rgba(14,23,38,0.84))]" />
       <div className="relative mx-auto flex min-h-[54vh] max-w-6xl flex-col justify-end">
-        <span className="eyebrow mb-5 text-[#d7aa73]">Your first memory</span>
+        <span className="eyebrow mb-5 text-[#d7aa73]">{c("newsletter_cta", "eyebrow", "Your first memory")}</span>
         <h2 className="display-title mb-8 max-w-4xl text-5xl md:text-7xl">
-          Describe the moments you want to remember forever.
+          {c("newsletter_cta", "title", "Describe the moments you want to remember forever.")}
         </h2>
         <div className="grid gap-8 md:grid-cols-[0.95fr_1.05fr] md:items-end">
           <p className="max-w-xl text-lg leading-9 text-white/76">
-            Tell us the feeling, the people, the pace, or the image in your head. We will turn it
-            into a journey that has room for surprise and still runs beautifully.
+            {c("newsletter_cta", "body", "Tell us the feeling, the people, the pace, or the image in your head. We will turn it into a journey that has room for surprise and still runs beautifully.")}
           </p>
           <form
             onSubmit={(e) => e.preventDefault()}
@@ -865,14 +1111,14 @@ function NewsletterCTA() {
             <input
               type="text"
               required
-              placeholder="Misty mountains, slow dinners, private trains..."
+              placeholder={c("newsletter_cta", "placeholder", "Misty mountains, slow dinners, private trains...")}
               className="min-h-14 rounded-xl border border-white/12 bg-black/20 px-5 text-base text-white outline-none placeholder:text-white/46 focus:border-accent"
             />
             <button
               type="submit"
               className="min-h-14 rounded-xl bg-accent px-7 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5 focus-ring"
             >
-              Begin
+              {c("newsletter_cta", "cta_label", "Begin")}
             </button>
           </form>
         </div>
