@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useLocalAuth } from "@/components/auth-provider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, type Dispatch, type SetStateAction } from "react";
 import { useAdminTabPref } from "@/lib/user-prefs";
 import { PageShell } from "@/components/page-shell";
 import { StarRating } from "@/components/star-rating";
+import { MEDIA } from "@/config/media";
 import {
   api,
   type ApiMedia,
@@ -22,6 +23,7 @@ import {
   type ApiSiteStat,
   type ApiOffer,
   type OfferPayload,
+  type AdminImportResult,
 } from "@/lib/api";
 import { AUTH0_ENABLED } from "@/lib/auth-config";
 import {
@@ -50,6 +52,47 @@ import {
   Square,
   ShieldAlert,
 } from "lucide-react";
+
+const PACKAGE_MEDIA_BY_SLUG: Record<string, string> = {
+  "bangkok-singapore": MEDIA.destinations["bangkok-singapore"],
+  "newyork-citypulse": MEDIA.destinations.newyork,
+  "salonei-retreat": MEDIA.destinations.salonei,
+  "switzerland-alpine": MEDIA.destinations.switzerland,
+  "tokyo-seoul-fusion": MEDIA.destinations["tokyo-seoul"],
+  "vietnam-river": MEDIA.destinations.vietnam,
+};
+
+const ASSET_MEDIA_BY_NAME: Record<string, string> = {
+  "bangkok & singapore.jpeg": MEDIA.destinations["bangkok-singapore"],
+  "newyork.jpg": MEDIA.destinations.newyork,
+  "salonei.jpeg": MEDIA.destinations.salonei,
+  "swizerland.jpeg": MEDIA.destinations.switzerland,
+  "tokyo & seoul.jpeg": MEDIA.destinations["tokyo-seoul"],
+  "vitenam.jpeg": MEDIA.destinations.vietnam,
+};
+
+function resolveAdminMediaUrl(url: string | undefined, slug: string, size = "600/400") {
+  if (!url) {
+    return (
+      PACKAGE_MEDIA_BY_SLUG[slug] ??
+      MEDIA.destinations[slug] ??
+      `https://picsum.photos/seed/${slug}/${size}`
+    );
+  }
+  if (url.startsWith("/assets/")) {
+    const assetName = decodeURIComponent(url.split("/").pop() ?? "").toLowerCase();
+    return (
+      ASSET_MEDIA_BY_NAME[assetName] ??
+      PACKAGE_MEDIA_BY_SLUG[slug] ??
+      `https://picsum.photos/seed/${slug}/${size}`
+    );
+  }
+  return url;
+}
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url);
+}
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -89,26 +132,55 @@ function useBulkSelect<T>(items: T[], getId: (item: T) => string) {
 
 // ── Reusable row-checkbox ─────────────────────────────────────────────────────
 
-function RowCheck({
-  checked,
-  onToggle,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-}) {
+function RowCheck({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); onToggle(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
       className="shrink-0 p-1 text-muted-foreground hover:text-foreground"
       aria-label={checked ? "Deselect" : "Select"}
     >
-      {checked ? (
-        <SquareCheck className="size-4 text-accent" />
-      ) : (
-        <Square className="size-4" />
-      )}
+      {checked ? <SquareCheck className="size-4 text-accent" /> : <Square className="size-4" />}
     </button>
+  );
+}
+
+function AdminMediaPreview({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className: string;
+}) {
+  if (isVideoUrl(src)) {
+    return (
+      <video
+        src={src}
+        aria-label={alt}
+        className={className}
+        muted
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={(e) => {
+        const img = e.currentTarget;
+        img.onerror = null;
+        img.src = `https://picsum.photos/seed/${encodeURIComponent(alt)}/600/400`;
+      }}
+    />
   );
 }
 
@@ -142,6 +214,125 @@ function BulkBar({
   );
 }
 
+type BulkKind = "packages" | "destinations";
+type ImportConflictMode = "skip" | "update";
+type ImportPromptState = { kind: BulkKind; file: File } | null;
+type BulkDeleteState = { kind: BulkKind; ids: string[] } | null;
+type AdminPopupState = {
+  title: string;
+  tone: "success" | "warning" | "danger";
+  message: string;
+  details?: string[];
+} | null;
+
+const PACKAGE_CSV_FIELDS = [
+  "slug",
+  "title",
+  "location",
+  "days",
+  "price",
+  "category",
+  "image_url",
+  "tagline",
+  "description",
+  "rating",
+  "review_count",
+  "published",
+] as const;
+
+const DESTINATION_CSV_FIELDS = [
+  "slug",
+  "name",
+  "image_url",
+  "packages_count",
+  "tagline",
+  "duration",
+  "price",
+  "rating",
+  "review_count",
+] as const;
+
+function csvEscape(value: unknown) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function downloadCsvFile(
+  filename: string,
+  fields: readonly string[],
+  rows: Record<string, unknown>[],
+) {
+  const csv = [
+    fields.join(","),
+    ...rows.map((row) => fields.map((field) => csvEscape(row[field])).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadSelectedPackages(items: ApiPackage[]) {
+  downloadCsvFile(
+    "selected_packages_bulk_modify.csv",
+    PACKAGE_CSV_FIELDS,
+    items.map((pkg) => ({
+      slug: pkg.slug,
+      title: pkg.title,
+      location: pkg.location,
+      days: pkg.days,
+      price: pkg.price,
+      category: pkg.category ?? "",
+      image_url: pkg.image_url ?? "",
+      tagline: pkg.tagline ?? "",
+      description: pkg.description ?? "",
+      rating: pkg.rating ?? "",
+      review_count: pkg.review_count ?? 0,
+      published: pkg.published === false ? "false" : "true",
+    })),
+  );
+}
+
+function downloadSelectedDestinations(items: ApiDestination[]) {
+  downloadCsvFile(
+    "selected_destinations_bulk_modify.csv",
+    DESTINATION_CSV_FIELDS,
+    items.map((dest) => ({
+      slug: dest.slug,
+      name: dest.name,
+      image_url: dest.image_url ?? "",
+      packages_count: dest.packages_count ?? 0,
+      tagline: dest.tagline ?? "",
+      duration: dest.duration ?? "",
+      price: dest.price ?? "",
+      rating: dest.rating ?? "",
+      review_count: dest.review_count ?? 0,
+    })),
+  );
+}
+
+function summarizeImport(kind: string, result: AdminImportResult): AdminPopupState {
+  const imported = result.imported ?? 0;
+  const updated = result.updated ?? 0;
+  const skipped = result.skipped ?? 0;
+  const errors = result.errors ?? [];
+  const conflicts = result.conflicts ?? [];
+  const hasProblems = errors.length > 0 || conflicts.length > 0;
+
+  return {
+    title: hasProblems ? "Import finished with notes" : "Import complete",
+    tone: hasProblems ? "warning" : "success",
+    message: `${kind}: ${imported} created, ${updated} updated, ${skipped} skipped.`,
+    details: [
+      ...conflicts.slice(0, 6).map((item) => `Row ${item.row}: ${item.message}`),
+      ...errors.slice(0, 6).map((item) => `Row ${item.row}: ${item.message}`),
+    ],
+  };
+}
+
 // ── Session expired / auth error banner ──────────────────────────────────────
 
 function SessionBanner({ error }: { error: Error | null }) {
@@ -171,7 +362,177 @@ function SessionBanner({ error }: { error: Error | null }) {
   );
 }
 
-type AdminTab = "overview" | "packages" | "media" | "reviews" | "planners" | "content" | "offers" | "pages";
+function AdminResultPopup({ popup, onClose }: { popup: AdminPopupState; onClose: () => void }) {
+  if (!popup) return null;
+  const toneClass =
+    popup.tone === "danger"
+      ? "text-red-600 bg-red-50"
+      : popup.tone === "warning"
+        ? "text-amber-700 bg-amber-50"
+        : "text-emerald-700 bg-emerald-50";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div
+              className={`mb-3 inline-flex rounded-full px-3 py-1 text-xs font-black ${toneClass}`}
+            >
+              {popup.tone === "danger"
+                ? "Needs attention"
+                : popup.tone === "warning"
+                  ? "Check rows"
+                  : "Done"}
+            </div>
+            <h2 className="text-xl font-black tracking-tight">{popup.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{popup.message}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-secondary">
+            <X className="size-5" />
+          </button>
+        </div>
+        {popup.details && popup.details.length > 0 && (
+          <div className="mt-5 max-h-48 overflow-y-auto rounded-xl bg-secondary/50 p-3 font-mono text-xs">
+            {popup.details.map((detail) => (
+              <p key={detail} className="py-1">
+                {detail}
+              </p>
+            ))}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 w-full rounded-full bg-foreground py-2.5 text-sm font-bold text-background"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ImportConflictPrompt({
+  state,
+  onClose,
+  onConfirm,
+  pending,
+}: {
+  state: ImportPromptState;
+  onClose: () => void;
+  onConfirm: (mode: ImportConflictMode) => void;
+  pending: boolean;
+}) {
+  if (!state) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-background p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-accent">Bulk import</p>
+            <h2 className="mt-1 text-xl font-black tracking-tight">
+              How should matching slugs be handled?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              File: <span className="font-semibold text-foreground">{state.file.name}</span>. If a
+              row uses an existing unique slug, choose whether to update that item or skip it.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-secondary">
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm("update")}
+            className="rounded-2xl border border-accent bg-accent/10 p-4 text-left hover:bg-accent/15 disabled:opacity-60"
+          >
+            <span className="font-black">Update existing</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+              Best for bulk modification after editing an exported CSV.
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onConfirm("skip")}
+            className="rounded-2xl border border-border p-4 text-left hover:bg-secondary disabled:opacity-60"
+          >
+            <span className="font-black">Skip existing</span>
+            <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+              Best when importing only new records and avoiding overwrites.
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BulkDeleteConfirm({
+  state,
+  onClose,
+  onConfirm,
+  pending,
+}: {
+  state: BulkDeleteState;
+  onClose: () => void;
+  onConfirm: () => void;
+  pending: boolean;
+}) {
+  if (!state) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl">
+        <h2 className="text-xl font-black tracking-tight">Delete {state.ids.length} selected?</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          This will remove the selected {state.kind}. This action cannot be undone from the admin
+          panel.
+        </p>
+        <div className="mt-5 max-h-36 overflow-y-auto rounded-xl bg-secondary/50 p-3 font-mono text-xs">
+          {state.ids.map((id) => (
+            <p key={id} className="py-1">
+              {id}
+            </p>
+          ))}
+        </div>
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-full border border-border py-2.5 text-sm font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={onConfirm}
+            className="flex-1 rounded-full bg-red-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+          >
+            {pending ? "Deleting..." : "Delete selected"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type AdminTab =
+  | "overview"
+  | "packages"
+  | "media"
+  | "reviews"
+  | "planners"
+  | "content"
+  | "offers"
+  | "pages";
 
 function AdminPage() {
   const { localUser } = useLocalAuth();
@@ -311,6 +672,41 @@ function OverviewTab() {
   const planners = plannersQuery.data ?? [];
   const overviewPackages = pkgsOverviewQuery.data ?? [];
   const overviewDestinations = destsOverviewQuery.data ?? [];
+  const [pkgModal, setPkgModal] = useState<{ mode: "add" | "edit"; data: PkgForm } | null>(null);
+  const [pkgDeleteSlug, setPkgDeleteSlug] = useState<string | null>(null);
+
+  const savePkg = useMutation({
+    mutationFn: (f: PkgForm) => {
+      const payload: PackagePayload = {
+        slug: f.slug.trim(),
+        title: f.title.trim(),
+        location: f.location.trim(),
+        days: Number(f.days),
+        price: Number(f.price),
+        category: f.category.trim() || undefined,
+        image_url: f.image_url.trim() || undefined,
+        tagline: f.tagline.trim() || undefined,
+        description: f.description.trim() || undefined,
+        published: f.published,
+      };
+      return pkgModal?.mode === "edit"
+        ? api.adminUpdatePackage(f.slug, payload)
+        : api.adminCreatePackage(payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      setPkgModal(null);
+    },
+  });
+
+  const deletePkg = useMutation({
+    mutationFn: (slug: string) => api.adminDeletePackage(slug),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      qc.invalidateQueries({ queryKey: ["packages"] });
+      setPkgDeleteSlug(null);
+    },
+  });
 
   // ── Bulk import state ──
   const [importStatus, setImportStatus] = useState<{
@@ -410,22 +806,40 @@ function OverviewTab() {
 
       {/* Import result banner */}
       {importStatus && (
-        <div className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+        <div
+          className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}
+        >
           <div className="flex-1">
             <span className="font-bold">
               {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
-              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+              {importStatus.imported} created · {importStatus.updated ?? 0} updated ·{" "}
+              {importStatus.skipped ?? 0} skipped ({importStatus.kind})
             </span>
-            {importStatus.errors.length > 0 && (
+            {((importStatus.conflicts?.length ?? 0) > 0 || importStatus.errors.length > 0) && (
               <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
-                {importStatus.errors.slice(0, 5).map((e) => (
-                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                {importStatus.conflicts?.slice(0, 5).map((e) => (
+                  <li key={`conflict-${e.row}`}>
+                    Row {e.row}: {e.message}
+                  </li>
                 ))}
-                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+                {importStatus.errors.slice(0, 5).map((e) => (
+                  <li key={`error-${e.row}`}>
+                    Row {e.row}: {e.message}
+                  </li>
+                ))}
+                {importStatus.errors.length + (importStatus.conflicts?.length ?? 0) > 5 && (
+                  <li>
+                    …and {importStatus.errors.length + (importStatus.conflicts?.length ?? 0) - 5}{" "}
+                    more
+                  </li>
+                )}
               </ul>
             )}
           </div>
-          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+          <button
+            onClick={() => setImportStatus(null)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -493,10 +907,7 @@ function OverviewTab() {
         <div className="border border-border rounded-2xl overflow-hidden mt-3">
           <div className="hidden md:grid grid-cols-12 gap-2 px-5 py-3 bg-secondary text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
             <div className="col-span-1 flex items-center">
-              <RowCheck
-                checked={inquiryBulk.allSelected}
-                onToggle={inquiryBulk.toggleAll}
-              />
+              <RowCheck checked={inquiryBulk.allSelected} onToggle={inquiryBulk.toggleAll} />
             </div>
             <div className="col-span-2">ID</div>
             <div className="col-span-2">Customer</div>
@@ -511,7 +922,10 @@ function OverviewTab() {
               onClick={() => inquiryBulk.toggleOne(l.id)}
               className={`grid grid-cols-2 md:grid-cols-12 gap-2 px-5 py-4 items-center text-sm cursor-pointer transition-colors ${i > 0 ? "border-t border-border" : ""} ${inquiryBulk.selected.has(l.id) ? "bg-accent/5" : "hover:bg-secondary/40"}`}
             >
-              <div className="hidden md:flex md:col-span-1 items-center" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="hidden md:flex md:col-span-1 items-center"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <RowCheck
                   checked={inquiryBulk.selected.has(l.id)}
                   onToggle={() => inquiryBulk.toggleOne(l.id)}
@@ -519,7 +933,9 @@ function OverviewTab() {
               </div>
               <div className="md:col-span-2 font-mono text-xs">{l.id}</div>
               <div className="md:col-span-2 font-medium">{l.name}</div>
-              <div className="md:col-span-1 text-muted-foreground text-xs truncate">{l.destination}</div>
+              <div className="md:col-span-1 text-muted-foreground text-xs truncate">
+                {l.destination}
+              </div>
               <div className="md:col-span-1 text-muted-foreground text-xs">{l.budget}</div>
               <div className="md:col-span-2" onClick={(e) => e.stopPropagation()}>
                 <select
@@ -528,7 +944,9 @@ function OverviewTab() {
                   className="text-[10px] font-mono uppercase tracking-widest rounded-full px-2.5 py-1 border border-border bg-background focus:outline-none"
                 >
                   {["New", "Assigned", "In review", "Quoted", "Won", "Lost"].map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -545,7 +963,9 @@ function OverviewTab() {
                 >
                   <option value="">Unassigned</option>
                   {planners.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -565,11 +985,18 @@ function OverviewTab() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) { handleImport("packages", f); e.target.value = ""; }
+                if (f) {
+                  handleImport("packages", f);
+                  e.target.value = "";
+                }
               }}
             />
           </label>
-          <button className="text-xs font-bold tracking-widest uppercase bg-foreground text-background px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-accent">
+          <button
+            type="button"
+            onClick={() => setPkgModal({ mode: "add", data: emptyPkg() })}
+            className="text-xs font-bold tracking-widest uppercase bg-foreground text-background px-4 py-2 rounded-full inline-flex items-center gap-2 hover:bg-accent"
+          >
             <Plus className="size-3" /> New package
           </button>
         </SectionHeader>
@@ -577,12 +1004,12 @@ function OverviewTab() {
           {overviewPackages.map((p) => (
             <div
               key={p.slug}
-              className="border border-border rounded-2xl p-4 flex gap-4 items-center"
+              className="border border-border rounded-2xl bg-card/70 p-3 flex gap-3 items-center transition-colors hover:border-accent/40 hover:bg-secondary/25"
             >
-              <img
-                src={p.image_url ?? `https://picsum.photos/seed/${p.slug}/64/64`}
+              <AdminMediaPreview
+                src={resolveAdminMediaUrl(p.image_url, p.slug, "200/200")}
                 alt={p.title}
-                className="size-16 rounded-xl object-cover shrink-0"
+                className="size-16 rounded-xl object-cover shrink-0 bg-secondary"
               />
               <div className="flex-1 min-w-0">
                 <div className="font-bold truncate">{p.title}</div>
@@ -590,7 +1017,28 @@ function OverviewTab() {
                   {p.days}d · ${p.price.toLocaleString()}
                 </div>
               </div>
-              <button className="text-xs font-bold underline hover:text-accent">Edit</button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPkgModal({
+                      mode: "edit",
+                      data: packageToForm(p),
+                    })
+                  }
+                  className="text-xs font-bold underline hover:text-accent"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPkgDeleteSlug(p.slug)}
+                  className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"
+                  aria-label={`Delete ${p.title}`}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -602,8 +1050,8 @@ function OverviewTab() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {overviewDestinations.map((d) => (
             <div key={d.slug} className="border border-border rounded-xl p-3 text-center">
-              <img
-                src={d.image_url ?? `https://picsum.photos/seed/${d.slug}/200/200`}
+              <AdminMediaPreview
+                src={resolveAdminMediaUrl(d.image_url, d.slug, "200/200")}
                 alt={d.name}
                 className="aspect-square w-full rounded-lg object-cover mb-2"
               />
@@ -613,6 +1061,47 @@ function OverviewTab() {
           ))}
         </div>
       </section>
+
+      <PackageModal
+        modal={pkgModal}
+        setModal={setPkgModal}
+        onClose={() => setPkgModal(null)}
+        onSubmit={(form) => savePkg.mutate(form)}
+        isPending={savePkg.isPending}
+        isError={savePkg.isError}
+      />
+
+      {pkgDeleteSlug && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setPkgDeleteSlug(null)}
+          />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+            <h3 className="text-lg font-extrabold">Delete package?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently removes <strong>{pkgDeleteSlug}</strong> and cannot be undone.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPkgDeleteSlug(null)}
+                className="flex-1 rounded-full border border-border py-2.5 text-sm font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletePkg.isPending}
+                onClick={() => deletePkg.mutate(pkgDeleteSlug)}
+                className="flex-1 rounded-full bg-red-600 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {deletePkg.isPending ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CSV templates & bulk tools */}
       <section>
@@ -704,26 +1193,49 @@ const emptyDest = (): DestForm => ({
   packages_count: "0",
 });
 
+function packageToForm(pkg: ApiPackage): PkgForm {
+  return {
+    slug: pkg.slug,
+    title: pkg.title,
+    location: pkg.location,
+    days: String(pkg.days),
+    price: String(pkg.price),
+    category: pkg.category ?? "",
+    image_url: pkg.image_url ?? "",
+    tagline: pkg.tagline ?? "",
+    description: pkg.description ?? "",
+    published: pkg.published !== false,
+  };
+}
+
 function PackagesTab() {
   const qc = useQueryClient();
   const [section, setSection] = useState<"packages" | "destinations">("packages");
 
   // ── Bulk import state ──
-  const [importStatus, setImportStatus] = useState<{
-    kind: string;
-    imported: number;
-    errors: { row: number; message: string }[];
-  } | null>(null);
+  const [importStatus, setImportStatus] = useState<(AdminImportResult & { kind: string }) | null>(
+    null,
+  );
+  const [resultPopup, setResultPopup] = useState<AdminPopupState>(null);
+  const [importPrompt, setImportPrompt] = useState<ImportPromptState>(null);
+  const [bulkDeleteTarget, setBulkDeleteTarget] = useState<BulkDeleteState>(null);
 
-  async function handleImport(kind: string, file: File) {
+  async function handleImport(kind: BulkKind, file: File, conflict: ImportConflictMode) {
     setImportStatus(null);
     try {
-      const result = await api.adminImportCsv(kind, file);
+      const result = await api.adminImportCsv(kind, file, conflict);
       setImportStatus({ kind, ...result });
+      setResultPopup(summarizeImport(kind, result));
       qc.invalidateQueries({ queryKey: ["admin-packages"] });
       qc.invalidateQueries({ queryKey: ["destinations"] });
     } catch (err) {
-      setImportStatus({ kind, imported: 0, errors: [{ row: 0, message: String(err) }] });
+      const failed = { kind, imported: 0, errors: [{ row: 0, message: String(err) }] };
+      setImportStatus(failed);
+      setResultPopup({
+        title: "Import failed",
+        tone: "danger",
+        message: String(err),
+      });
     }
   }
 
@@ -806,41 +1318,90 @@ function PackagesTab() {
 
   const bulkDeletePkgs = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("packages", ids),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      setBulkDeleteTarget(null);
       pkgBulk.clearSelection();
+      setResultPopup({
+        title: result.errors?.length ? "Delete finished with notes" : "Packages deleted",
+        tone: result.errors?.length ? "warning" : "success",
+        message: `${result.deleted} package${result.deleted === 1 ? "" : "s"} deleted.`,
+        details: result.errors?.map((item) => `${item.id}: ${item.message}`),
+      });
     },
   });
   const bulkDeleteDests = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("destinations", ids),
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["destinations"] });
+      setBulkDeleteTarget(null);
       destBulk.clearSelection();
+      setResultPopup({
+        title: result.errors?.length ? "Delete finished with notes" : "Destinations deleted",
+        tone: result.errors?.length ? "warning" : "success",
+        message: `${result.deleted} destination${result.deleted === 1 ? "" : "s"} deleted.`,
+        details: result.errors?.map((item) => `${item.id}: ${item.message}`),
+      });
     },
   });
 
   return (
     <>
       <SessionBanner error={pkgsQuery.error as Error | null} />
+      <AdminResultPopup popup={resultPopup} onClose={() => setResultPopup(null)} />
+      <ImportConflictPrompt
+        state={importPrompt}
+        pending={false}
+        onClose={() => setImportPrompt(null)}
+        onConfirm={(mode) => {
+          if (!importPrompt) return;
+          const pending = importPrompt;
+          setImportPrompt(null);
+          handleImport(pending.kind, pending.file, mode);
+        }}
+      />
+      <BulkDeleteConfirm
+        state={bulkDeleteTarget}
+        pending={bulkDeletePkgs.isPending || bulkDeleteDests.isPending}
+        onClose={() => setBulkDeleteTarget(null)}
+        onConfirm={() => {
+          if (!bulkDeleteTarget) return;
+          if (bulkDeleteTarget.kind === "packages") {
+            bulkDeletePkgs.mutate(bulkDeleteTarget.ids);
+          } else {
+            bulkDeleteDests.mutate(bulkDeleteTarget.ids);
+          }
+        }}
+      />
 
       {/* Import result banner */}
       {importStatus && (
-        <div className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+        <div
+          className={`mb-6 rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}
+        >
           <div className="flex-1">
             <span className="font-bold">
               {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
-              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported (
+              {importStatus.kind})
             </span>
             {importStatus.errors.length > 0 && (
               <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
                 {importStatus.errors.slice(0, 5).map((e) => (
-                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                  <li key={e.row}>
+                    Row {e.row}: {e.message}
+                  </li>
                 ))}
-                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+                {importStatus.errors.length > 5 && (
+                  <li>…and {importStatus.errors.length - 5} more</li>
+                )}
               </ul>
             )}
           </div>
-          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+          <button
+            onClick={() => setImportStatus(null)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -867,8 +1428,18 @@ function PackagesTab() {
         <div className="flex items-center gap-2">
           <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary">
             <Upload className="size-3" /> Import CSV
-            <input type="file" accept=".csv,text/csv" className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport(section, f); e.target.value = ""; } }} />
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setImportPrompt({ kind: section, file: f });
+                  e.target.value = "";
+                }
+              }}
+            />
           </label>
           <button
             onClick={() => api.adminExportCsv(section)}
@@ -903,8 +1474,26 @@ function PackagesTab() {
           <BulkBar count={pkgBulk.selected.size} onClear={pkgBulk.clearSelection}>
             <button
               type="button"
+              onClick={() => {
+                const selected = pkgs.filter((pkg) => pkgBulk.selected.has(pkg.slug));
+                downloadSelectedPackages(selected);
+                setResultPopup({
+                  title: "Bulk modify CSV downloaded",
+                  tone: "success",
+                  message:
+                    "Edit the selected package rows in the CSV, then use Import CSV and choose Update existing.",
+                });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-bold hover:bg-secondary"
+            >
+              <Download className="size-3" /> Bulk modify CSV
+            </button>
+            <button
+              type="button"
               disabled={bulkDeletePkgs.isPending}
-              onClick={() => bulkDeletePkgs.mutate(Array.from(pkgBulk.selected))}
+              onClick={() =>
+                setBulkDeleteTarget({ kind: "packages", ids: Array.from(pkgBulk.selected) })
+              }
               className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               <Trash2 className="size-3" /> Delete selected
@@ -921,13 +1510,11 @@ function PackagesTab() {
                 checked={pkgBulk.selected.has(pkg.slug)}
                 onToggle={() => pkgBulk.toggleOne(pkg.slug)}
               />
-              {pkg.image_url && (
-                <img
-                  src={pkg.image_url}
-                  alt={pkg.title}
-                  className="h-20 w-28 flex-none rounded-xl object-cover"
-                />
-              )}
+              <AdminMediaPreview
+                src={resolveAdminMediaUrl(pkg.image_url, pkg.slug, "300/220")}
+                alt={pkg.title}
+                className="h-20 w-28 flex-none rounded-xl object-cover bg-secondary"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-extrabold">{pkg.title}</span>
@@ -958,16 +1545,7 @@ function PackagesTab() {
                     setPkgModal({
                       mode: "edit",
                       data: {
-                        slug: pkg.slug,
-                        title: pkg.title,
-                        location: pkg.location,
-                        days: String(pkg.days),
-                        price: String(pkg.price),
-                        category: pkg.category ?? "",
-                        image_url: pkg.image_url ?? "",
-                        tagline: pkg.tagline ?? "",
-                        description: pkg.description ?? "",
-                        published: pkg.published !== false,
+                        ...packageToForm(pkg),
                       },
                     })
                   }
@@ -994,8 +1572,26 @@ function PackagesTab() {
           <BulkBar count={destBulk.selected.size} onClear={destBulk.clearSelection}>
             <button
               type="button"
+              onClick={() => {
+                const selected = dests.filter((dest) => destBulk.selected.has(dest.slug));
+                downloadSelectedDestinations(selected);
+                setResultPopup({
+                  title: "Bulk modify CSV downloaded",
+                  tone: "success",
+                  message:
+                    "Edit the selected destination rows in the CSV, then use Import CSV and choose Update existing.",
+                });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-bold hover:bg-secondary"
+            >
+              <Download className="size-3" /> Bulk modify CSV
+            </button>
+            <button
+              type="button"
               disabled={bulkDeleteDests.isPending}
-              onClick={() => bulkDeleteDests.mutate(Array.from(destBulk.selected))}
+              onClick={() =>
+                setBulkDeleteTarget({ kind: "destinations", ids: Array.from(destBulk.selected) })
+              }
               className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               <Trash2 className="size-3" /> Delete selected
@@ -1012,13 +1608,11 @@ function PackagesTab() {
                 checked={destBulk.selected.has(dest.slug)}
                 onToggle={() => destBulk.toggleOne(dest.slug)}
               />
-              {dest.image_url && (
-                <img
-                  src={dest.image_url}
-                  alt={dest.name}
-                  className="h-20 w-28 flex-none rounded-xl object-cover"
-                />
-              )}
+              <AdminMediaPreview
+                src={resolveAdminMediaUrl(dest.image_url, dest.slug, "300/220")}
+                alt={dest.name}
+                className="h-20 w-28 flex-none rounded-xl object-cover bg-secondary"
+              />
               <div className="min-w-0 flex-1">
                 <span className="text-base font-extrabold">{dest.name}</span>
                 <p className="mt-0.5 text-sm text-muted-foreground">
@@ -1177,7 +1771,7 @@ function PackagesTab() {
                     placeholder="4999"
                   />
                 </AdminField>
-                <AdminField label="Image URL" className="sm:col-span-2">
+                <AdminField label="Image or video URL" className="sm:col-span-2">
                   <input
                     value={pkgModal.data.image_url}
                     onChange={(e) =>
@@ -1186,7 +1780,7 @@ function PackagesTab() {
                       )
                     }
                     className="admin-input"
-                    placeholder="https://… or /assets/image.jpg"
+                    placeholder="https://example.com/photo.jpg or https://example.com/reel.mp4"
                   />
                 </AdminField>
                 <AdminField label="Tagline" className="sm:col-span-2">
@@ -1457,6 +2051,181 @@ function PackagesTab() {
         </div>
       )}
     </>
+  );
+}
+
+function PackageModal({
+  modal,
+  setModal,
+  onClose,
+  onSubmit,
+  isPending,
+  isError,
+}: {
+  modal: { mode: "add" | "edit"; data: PkgForm } | null;
+  setModal: Dispatch<SetStateAction<{ mode: "add" | "edit"; data: PkgForm } | null>>;
+  onClose: () => void;
+  onSubmit: (form: PkgForm) => void;
+  isPending: boolean;
+  isError: boolean;
+}) {
+  if (!modal) return null;
+
+  const update = (field: keyof PkgForm, value: string | boolean) => {
+    setModal((m) => m && { ...m, data: { ...m.data, [field]: value } });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <div>
+            <h2 className="text-lg font-extrabold">
+              {modal.mode === "add" ? "Add Package" : "Edit Package"}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Add details manually and paste an image or video URL for the card media.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-secondary">
+            <X className="size-5" />
+          </button>
+        </div>
+        <form
+          className="max-h-[75vh] overflow-y-auto p-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit(modal.data);
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AdminField
+              label="Package slug *"
+              hint={
+                modal.mode === "edit"
+                  ? "Cannot change after creation"
+                  : "URL-friendly ID, e.g. bali-luxury"
+              }
+            >
+              <input
+                required
+                value={modal.data.slug}
+                disabled={modal.mode === "edit"}
+                onChange={(e) => update("slug", e.target.value)}
+                className="admin-input"
+                placeholder="bali-luxury-escape"
+              />
+            </AdminField>
+            <AdminField label="Title *">
+              <input
+                required
+                value={modal.data.title}
+                onChange={(e) => update("title", e.target.value)}
+                className="admin-input"
+                placeholder="Bali Luxury Escape"
+              />
+            </AdminField>
+            <AdminField label="Location *">
+              <input
+                required
+                value={modal.data.location}
+                onChange={(e) => update("location", e.target.value)}
+                className="admin-input"
+                placeholder="Indonesia"
+              />
+            </AdminField>
+            <AdminField label="Category">
+              <input
+                value={modal.data.category}
+                onChange={(e) => update("category", e.target.value)}
+                className="admin-input"
+                placeholder="Luxury / Adventure / Signature"
+              />
+            </AdminField>
+            <AdminField label="Days *">
+              <input
+                required
+                type="number"
+                min={1}
+                value={modal.data.days}
+                onChange={(e) => update("days", e.target.value)}
+                className="admin-input"
+                placeholder="7"
+              />
+            </AdminField>
+            <AdminField label="Price (USD) *">
+              <input
+                required
+                type="number"
+                min={0}
+                value={modal.data.price}
+                onChange={(e) => update("price", e.target.value)}
+                className="admin-input"
+                placeholder="4999"
+              />
+            </AdminField>
+            <AdminField label="Image or video URL" className="sm:col-span-2">
+              <input
+                value={modal.data.image_url}
+                onChange={(e) => update("image_url", e.target.value)}
+                className="admin-input"
+                placeholder="https://example.com/photo.jpg or https://example.com/reel.mp4"
+              />
+            </AdminField>
+            <AdminField label="Tagline" className="sm:col-span-2">
+              <input
+                value={modal.data.tagline}
+                onChange={(e) => update("tagline", e.target.value)}
+                className="admin-input"
+                placeholder="Short one-line hook"
+              />
+            </AdminField>
+            <AdminField label="Description" className="sm:col-span-2">
+              <textarea
+                rows={3}
+                value={modal.data.description}
+                onChange={(e) => update("description", e.target.value)}
+                className="admin-input resize-none"
+                placeholder="Full package description"
+              />
+            </AdminField>
+            <AdminField label="Status" className="sm:col-span-2">
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-border px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={modal.data.published}
+                  onChange={(e) => update("published", e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <span className="text-sm font-semibold">Published</span>
+              </label>
+            </AdminField>
+          </div>
+          {isError && (
+            <p className="mt-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">
+              Save failed. Check all required fields.
+            </p>
+          )}
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-border px-5 py-2.5 text-sm font-bold"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isPending}
+              className="rounded-full bg-foreground px-6 py-2.5 text-sm font-bold text-background disabled:opacity-60"
+            >
+              {isPending ? "Saving..." : modal.mode === "add" ? "Create Package" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -1959,10 +2728,18 @@ function ReviewsTab() {
                 setReplyText((review as unknown as { admin_reply?: string }).admin_reply ?? "");
               }}
               onSaveReply={() => replyMut.mutate({ id: review.public_id, reply: replyText })}
-              onCancelReply={() => { setReplyingId(null); setReplyText(""); }}
+              onCancelReply={() => {
+                setReplyingId(null);
+                setReplyText("");
+              }}
               onToggleVerify={() => verifyMut.mutate(review.public_id)}
               statusColor={statusColor}
-              loading={updateMut.isPending || deleteMut.isPending || replyMut.isPending || verifyMut.isPending}
+              loading={
+                updateMut.isPending ||
+                deleteMut.isPending ||
+                replyMut.isPending ||
+                verifyMut.isPending
+              }
             />
           ))}
         </div>
@@ -2181,7 +2958,8 @@ function ReviewModerationCard({
                 disabled={loading}
                 className="inline-flex items-center gap-1 rounded-full border border-green-300 px-3 py-1 text-[11px] font-bold text-green-700 hover:bg-green-50 disabled:opacity-50"
               >
-                <CheckCircle2 className="size-3" /> {(review as unknown as { verified?: boolean }).verified ? "Unverify" : "Verify"}
+                <CheckCircle2 className="size-3" />{" "}
+                {(review as unknown as { verified?: boolean }).verified ? "Unverify" : "Verify"}
               </button>
               {!replying && (
                 <button
@@ -2301,8 +3079,19 @@ function PlannersTab() {
         <span className="text-xs text-muted-foreground">{planners.length} planners</span>
         <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-bold hover:bg-secondary">
           <Upload className="size-3" /> Import CSV
-          <input type="file" accept=".csv,text/csv" className="hidden"
-            onChange={async (e) => { const f = e.target.files?.[0]; if (f) { await api.adminImportCsv("planners", f); qc.invalidateQueries({ queryKey: ["planners"] }); e.target.value = ""; } }} />
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                await api.adminImportCsv("planners", f);
+                qc.invalidateQueries({ queryKey: ["planners"] });
+                e.target.value = "";
+              }
+            }}
+          />
         </label>
         <button
           onClick={() => api.adminExportCsv("planners")}
@@ -2592,7 +3381,10 @@ function CsvCard({
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) { onImport(f); e.target.value = ""; }
+                  if (f) {
+                    onImport(f);
+                    e.target.value = "";
+                  }
                 }}
               />
               <button
@@ -2623,7 +3415,9 @@ function CsvCard({
 // ── Content tab — Services / FAQs / Testimonials / Site Stats ─────────────────
 
 function ContentTab() {
-  const [section, setSection] = useState<"services" | "faqs" | "testimonials" | "stats">("services");
+  const [section, setSection] = useState<"services" | "faqs" | "testimonials" | "stats">(
+    "services",
+  );
   const qc = useQueryClient();
 
   // ── Bulk import state ──
@@ -2650,7 +3444,10 @@ function ContentTab() {
   const updateSvc = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ApiService> }) =>
       api.updateService(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); setEditSvc(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      setEditSvc(null);
+    },
   });
   const deleteSvc = useMutation({
     mutationFn: (id: string) => api.deleteService(id),
@@ -2662,12 +3459,17 @@ function ContentTab() {
   const [editFaq, setEditFaq] = useState<Partial<ApiFaq> | null>(null);
   const createFaq = useMutation({
     mutationFn: (data: { question: string; answer: string }) => api.createFaq(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); setEditFaq(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["faqs"] });
+      setEditFaq(null);
+    },
   });
   const updateFaq = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<ApiFaq> }) =>
-      api.updateFaq(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); setEditFaq(null); },
+    mutationFn: ({ id, data }: { id: number; data: Partial<ApiFaq> }) => api.updateFaq(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["faqs"] });
+      setEditFaq(null);
+    },
   });
   const deleteFaq = useMutation({
     mutationFn: (id: number) => api.deleteFaq(id),
@@ -2680,7 +3482,10 @@ function ContentTab() {
   const createTest = useMutation({
     mutationFn: (data: { name: string; role: string; quote: string; location?: string }) =>
       api.createTestimonial(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); setEditTest(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["testimonials"] });
+      setEditTest(null);
+    },
   });
 
   // ── Bulk select (after queries so data is available) ──
@@ -2690,20 +3495,32 @@ function ContentTab() {
 
   const bulkDeleteSvcs = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("services", ids),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["services"] }); svcBulk.clearSelection(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      svcBulk.clearSelection();
+    },
   });
   const bulkDeleteFaqs = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("faqs", ids),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["faqs"] }); faqBulk.clearSelection(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["faqs"] });
+      faqBulk.clearSelection();
+    },
   });
   const bulkDeleteTests = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("testimonials", ids),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); testBulk.clearSelection(); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["testimonials"] });
+      testBulk.clearSelection();
+    },
   });
   const updateTest = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<ApiTestimonial> }) =>
       api.updateTestimonial(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["testimonials"] }); setEditTest(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["testimonials"] });
+      setEditTest(null);
+    },
   });
   const deleteTest = useMutation({
     mutationFn: (id: number) => api.deleteTestimonial(id),
@@ -2715,8 +3532,13 @@ function ContentTab() {
   const [statsEdit, setStatsEdit] = useState<ApiSiteStat[] | null>(null);
   const saveStats = useMutation({
     mutationFn: (items: ApiSiteStat[]) =>
-      api.updateSiteStats(items.map((s) => ({ value: s.value, label: s.label, sort_order: s.sort_order }))),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["site-stats"] }); setStatsEdit(null); },
+      api.updateSiteStats(
+        items.map((s) => ({ value: s.value, label: s.label, sort_order: s.sort_order })),
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["site-stats"] });
+      setStatsEdit(null);
+    },
   });
 
   const sectionTabs: { key: typeof section; label: string }[] = [
@@ -2732,22 +3554,32 @@ function ContentTab() {
 
       {/* Import result banner */}
       {importStatus && (
-        <div className={`rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}>
+        <div
+          className={`rounded-2xl p-4 text-sm flex items-start gap-3 ${importStatus.errors.length ? "bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800" : "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800"}`}
+        >
           <div className="flex-1">
             <span className="font-bold">
               {importStatus.errors.length === 0 ? "✓ " : "⚠ "}
-              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported ({importStatus.kind})
+              {importStatus.imported} row{importStatus.imported !== 1 ? "s" : ""} imported (
+              {importStatus.kind})
             </span>
             {importStatus.errors.length > 0 && (
               <ul className="mt-2 space-y-1 font-mono text-xs text-red-700 dark:text-red-400">
                 {importStatus.errors.slice(0, 5).map((e) => (
-                  <li key={e.row}>Row {e.row}: {e.message}</li>
+                  <li key={e.row}>
+                    Row {e.row}: {e.message}
+                  </li>
                 ))}
-                {importStatus.errors.length > 5 && <li>…and {importStatus.errors.length - 5} more</li>}
+                {importStatus.errors.length > 5 && (
+                  <li>…and {importStatus.errors.length - 5} more</li>
+                )}
               </ul>
             )}
           </div>
-          <button onClick={() => setImportStatus(null)} className="shrink-0 text-muted-foreground hover:text-foreground">
+          <button
+            onClick={() => setImportStatus(null)}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
             <X className="size-4" />
           </button>
         </div>
@@ -2759,7 +3591,9 @@ function ContentTab() {
             key={t.key}
             onClick={() => setSection(t.key)}
             className={`px-4 py-2 text-sm font-semibold rounded-t-lg transition-colors ${
-              section === t.key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+              section === t.key
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {t.label}
@@ -2775,16 +3609,31 @@ function ContentTab() {
             <div className="flex gap-2">
               <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
                 <Upload className="size-3" /> Import CSV
-                <input type="file" accept=".csv,text/csv" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("services", f); e.target.value = ""; } }} />
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      handleImport("services", f);
+                      e.target.value = "";
+                    }
+                  }}
+                />
               </label>
-              <button onClick={() => api.adminExportCsv("services")}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+              <button
+                onClick={() => api.adminExportCsv("services")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary"
+              >
                 <Download className="size-3" /> Export CSV
               </button>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">Edit rating, description, and highlight copy for each service. These appear on the homepage and Services page.</p>
+          <p className="text-sm text-muted-foreground">
+            Edit rating, description, and highlight copy for each service. These appear on the
+            homepage and Services page.
+          </p>
           <BulkBar count={svcBulk.selected.size} onClear={svcBulk.clearSelection}>
             <button
               type="button"
@@ -2801,7 +3650,9 @@ function ContentTab() {
                 <div key={s.id} className="border border-accent rounded-xl p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold uppercase text-muted-foreground">Name</label>
+                      <label className="text-xs font-bold uppercase text-muted-foreground">
+                        Name
+                      </label>
                       <input
                         className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                         value={editSvc.name ?? ""}
@@ -2809,17 +3660,26 @@ function ContentTab() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold uppercase text-muted-foreground">Rating</label>
+                      <label className="text-xs font-bold uppercase text-muted-foreground">
+                        Rating
+                      </label>
                       <input
-                        type="number" min="0" max="5" step="0.1"
+                        type="number"
+                        min="0"
+                        max="5"
+                        step="0.1"
                         className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                         value={editSvc.rating ?? 5}
-                        onChange={(e) => setEditSvc((v) => ({ ...v!, rating: parseFloat(e.target.value) }))}
+                        onChange={(e) =>
+                          setEditSvc((v) => ({ ...v!, rating: parseFloat(e.target.value) }))
+                        }
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Description</label>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Description
+                    </label>
                     <textarea
                       className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                       rows={2}
@@ -2828,7 +3688,9 @@ function ContentTab() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-bold uppercase text-muted-foreground">Highlight quote</label>
+                    <label className="text-xs font-bold uppercase text-muted-foreground">
+                      Highlight quote
+                    </label>
                     <input
                       className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
                       value={editSvc.highlight ?? ""}
@@ -2837,12 +3699,27 @@ function ContentTab() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => updateSvc.mutate({ id: s.id, data: { name: editSvc.name, description: editSvc.description, rating: editSvc.rating, highlight: editSvc.highlight } })}
+                      onClick={() =>
+                        updateSvc.mutate({
+                          id: s.id,
+                          data: {
+                            name: editSvc.name,
+                            description: editSvc.description,
+                            rating: editSvc.rating,
+                            highlight: editSvc.highlight,
+                          },
+                        })
+                      }
                       className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
                     >
                       Save
                     </button>
-                    <button onClick={() => setEditSvc(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                    <button
+                      onClick={() => setEditSvc(null)}
+                      className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -2851,18 +3728,33 @@ function ContentTab() {
                   onClick={() => svcBulk.toggleOne(s.id)}
                   className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${svcBulk.selected.has(s.id) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
                 >
-                  <RowCheck checked={svcBulk.selected.has(s.id)} onToggle={() => svcBulk.toggleOne(s.id)} />
+                  <RowCheck
+                    checked={svcBulk.selected.has(s.id)}
+                    onToggle={() => svcBulk.toggleOne(s.id)}
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="font-bold">{s.name}</div>
                     <div className="text-sm text-muted-foreground mt-1">{s.description}</div>
-                    <div className="text-xs text-accent mt-1">★ {s.rating.toFixed(1)} · {s.review_count} reviews · "{s.highlight}"</div>
+                    <div className="text-xs text-accent mt-1">
+                      ★ {s.rating.toFixed(1)} · {s.review_count} reviews · "{s.highlight}"
+                    </div>
                   </div>
                   <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setEditSvc({ ...s })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
-                    <button onClick={() => deleteSvc.mutate(s.id)} className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"><Trash2 className="size-3.5" /></button>
+                    <button
+                      onClick={() => setEditSvc({ ...s })}
+                      className="rounded-full border border-border p-2 hover:bg-secondary"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteSvc.mutate(s.id)}
+                      className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
-              )
+              ),
             )}
           </div>
         </div>
@@ -2876,11 +3768,23 @@ function ContentTab() {
             <div className="flex items-center gap-2">
               <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
                 <Upload className="size-3" /> Import CSV
-                <input type="file" accept=".csv,text/csv" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("faqs", f); e.target.value = ""; } }} />
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      handleImport("faqs", f);
+                      e.target.value = "";
+                    }
+                  }}
+                />
               </label>
-              <button onClick={() => api.adminExportCsv("faqs")}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+              <button
+                onClick={() => api.adminExportCsv("faqs")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary"
+              >
                 <Download className="size-3" /> Export CSV
               </button>
               <button
@@ -2893,14 +3797,34 @@ function ContentTab() {
           </div>
           {editFaq && !editFaq.id && (
             <div className="border border-accent rounded-xl p-4 space-y-3">
-              <input placeholder="Question" className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={editFaq.question ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))} />
-              <textarea placeholder="Answer" rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={editFaq.answer ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))} />
+              <input
+                placeholder="Question"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editFaq.question ?? ""}
+                onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))}
+              />
+              <textarea
+                placeholder="Answer"
+                rows={3}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editFaq.answer ?? ""}
+                onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))}
+              />
               <div className="flex gap-2">
-                <button onClick={() => createFaq.mutate({ question: editFaq.question!, answer: editFaq.answer! })}
-                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
-                <button onClick={() => setEditFaq(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                <button
+                  onClick={() =>
+                    createFaq.mutate({ question: editFaq.question!, answer: editFaq.answer! })
+                  }
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditFaq(null)}
+                  className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
@@ -2918,14 +3842,35 @@ function ContentTab() {
             {faqsQ.data?.map((f) =>
               editFaq?.id === f.id ? (
                 <div key={f.id} className="border border-accent rounded-xl p-4 space-y-3">
-                  <input className="w-full rounded-lg border border-border px-3 py-2 text-sm font-bold"
-                    value={editFaq.question ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))} />
-                  <textarea rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                    value={editFaq.answer ?? ""} onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))} />
+                  <input
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm font-bold"
+                    value={editFaq.question ?? ""}
+                    onChange={(e) => setEditFaq((v) => ({ ...v!, question: e.target.value }))}
+                  />
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editFaq.answer ?? ""}
+                    onChange={(e) => setEditFaq((v) => ({ ...v!, answer: e.target.value }))}
+                  />
                   <div className="flex gap-2">
-                    <button onClick={() => updateFaq.mutate({ id: f.id, data: { question: editFaq.question, answer: editFaq.answer } })}
-                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
-                    <button onClick={() => setEditFaq(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                    <button
+                      onClick={() =>
+                        updateFaq.mutate({
+                          id: f.id,
+                          data: { question: editFaq.question, answer: editFaq.answer },
+                        })
+                      }
+                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditFaq(null)}
+                      className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -2934,17 +3879,30 @@ function ContentTab() {
                   onClick={() => faqBulk.toggleOne(String(f.id))}
                   className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${faqBulk.selected.has(String(f.id)) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
                 >
-                  <RowCheck checked={faqBulk.selected.has(String(f.id))} onToggle={() => faqBulk.toggleOne(String(f.id))} />
+                  <RowCheck
+                    checked={faqBulk.selected.has(String(f.id))}
+                    onToggle={() => faqBulk.toggleOne(String(f.id))}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-bold">{f.question}</div>
                     <div className="text-sm text-muted-foreground mt-1">{f.answer}</div>
                   </div>
                   <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setEditFaq({ ...f })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
-                    <button onClick={() => deleteFaq.mutate(f.id)} className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"><Trash2 className="size-3.5" /></button>
+                    <button
+                      onClick={() => setEditFaq({ ...f })}
+                      className="rounded-full border border-border p-2 hover:bg-secondary"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteFaq.mutate(f.id)}
+                      className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
-              )
+              ),
             )}
           </div>
         </div>
@@ -2958,11 +3916,23 @@ function ContentTab() {
             <div className="flex items-center gap-2">
               <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
                 <Upload className="size-3" /> Import CSV
-                <input type="file" accept=".csv,text/csv" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImport("testimonials", f); e.target.value = ""; } }} />
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      handleImport("testimonials", f);
+                      e.target.value = "";
+                    }
+                  }}
+                />
               </label>
-              <button onClick={() => api.adminExportCsv("testimonials")}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
+              <button
+                onClick={() => api.adminExportCsv("testimonials")}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary"
+              >
                 <Download className="size-3" /> Export CSV
               </button>
               <button
@@ -2976,19 +3946,52 @@ function ContentTab() {
           {editTest && !editTest.id && (
             <div className="border border-accent rounded-xl p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <input placeholder="Name" className="rounded-lg border border-border px-3 py-2 text-sm"
-                  value={editTest.name ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))} />
-                <input placeholder="Role / Title" className="rounded-lg border border-border px-3 py-2 text-sm"
-                  value={editTest.role ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))} />
+                <input
+                  placeholder="Name"
+                  className="rounded-lg border border-border px-3 py-2 text-sm"
+                  value={editTest.name ?? ""}
+                  onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))}
+                />
+                <input
+                  placeholder="Role / Title"
+                  className="rounded-lg border border-border px-3 py-2 text-sm"
+                  value={editTest.role ?? ""}
+                  onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))}
+                />
               </div>
-              <textarea placeholder="Quote" rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={editTest.quote ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))} />
-              <input placeholder="Location (optional)" className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={editTest.location ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))} />
+              <textarea
+                placeholder="Quote"
+                rows={3}
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editTest.quote ?? ""}
+                onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))}
+              />
+              <input
+                placeholder="Location (optional)"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                value={editTest.location ?? ""}
+                onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))}
+              />
               <div className="flex gap-2">
-                <button onClick={() => createTest.mutate({ name: editTest.name!, role: editTest.role!, quote: editTest.quote!, location: editTest.location })}
-                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
-                <button onClick={() => setEditTest(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                <button
+                  onClick={() =>
+                    createTest.mutate({
+                      name: editTest.name!,
+                      role: editTest.role!,
+                      quote: editTest.quote!,
+                      location: editTest.location,
+                    })
+                  }
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditTest(null)}
+                  className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
@@ -2997,19 +4000,51 @@ function ContentTab() {
               editTest?.id === t.id ? (
                 <div key={t.id} className="border border-accent rounded-xl p-4 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <input className="rounded-lg border border-border px-3 py-2 text-sm"
-                      value={editTest.name ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))} />
-                    <input className="rounded-lg border border-border px-3 py-2 text-sm"
-                      value={editTest.role ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))} />
+                    <input
+                      className="rounded-lg border border-border px-3 py-2 text-sm"
+                      value={editTest.name ?? ""}
+                      onChange={(e) => setEditTest((v) => ({ ...v!, name: e.target.value }))}
+                    />
+                    <input
+                      className="rounded-lg border border-border px-3 py-2 text-sm"
+                      value={editTest.role ?? ""}
+                      onChange={(e) => setEditTest((v) => ({ ...v!, role: e.target.value }))}
+                    />
                   </div>
-                  <textarea rows={3} className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                    value={editTest.quote ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))} />
-                  <input className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                    value={editTest.location ?? ""} onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))} />
+                  <textarea
+                    rows={3}
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editTest.quote ?? ""}
+                    onChange={(e) => setEditTest((v) => ({ ...v!, quote: e.target.value }))}
+                  />
+                  <input
+                    className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                    value={editTest.location ?? ""}
+                    onChange={(e) => setEditTest((v) => ({ ...v!, location: e.target.value }))}
+                  />
                   <div className="flex gap-2">
-                    <button onClick={() => updateTest.mutate({ id: t.id, data: { name: editTest.name, role: editTest.role, quote: editTest.quote, location: editTest.location } })}
-                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save</button>
-                    <button onClick={() => setEditTest(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                    <button
+                      onClick={() =>
+                        updateTest.mutate({
+                          id: t.id,
+                          data: {
+                            name: editTest.name,
+                            role: editTest.role,
+                            quote: editTest.quote,
+                            location: editTest.location,
+                          },
+                        })
+                      }
+                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditTest(null)}
+                      className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -3018,18 +4053,33 @@ function ContentTab() {
                   onClick={() => testBulk.toggleOne(String(t.id))}
                   className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${testBulk.selected.has(String(t.id)) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
                 >
-                  <RowCheck checked={testBulk.selected.has(String(t.id))} onToggle={() => testBulk.toggleOne(String(t.id))} />
+                  <RowCheck
+                    checked={testBulk.selected.has(String(t.id))}
+                    onToggle={() => testBulk.toggleOne(String(t.id))}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="font-bold">{t.name}</div>
-                    <div className="text-xs text-accent">{t.role} · {t.location}</div>
+                    <div className="text-xs text-accent">
+                      {t.role} · {t.location}
+                    </div>
                     <div className="text-sm text-muted-foreground mt-2">"{t.quote}"</div>
                   </div>
                   <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setEditTest({ ...t })} className="rounded-full border border-border p-2 hover:bg-secondary"><Pencil className="size-3.5" /></button>
-                    <button onClick={() => deleteTest.mutate(t.id)} className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"><Trash2 className="size-3.5" /></button>
+                    <button
+                      onClick={() => setEditTest({ ...t })}
+                      className="rounded-full border border-border p-2 hover:bg-secondary"
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={() => deleteTest.mutate(t.id)}
+                      className="rounded-full border border-destructive/30 p-2 text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
-              )
+              ),
             )}
           </div>
           <BulkBar count={testBulk.selected.size} onClear={testBulk.clearSelection}>
@@ -3048,7 +4098,9 @@ function ContentTab() {
       {/* ── CSV Templates ── */}
       {section !== "stats" && (
         <div className="pt-4 border-t border-border">
-          <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3">CSV Templates</h4>
+          <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-3">
+            CSV Templates
+          </h4>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <CsvCard
               name="services.csv"
@@ -3079,26 +4131,54 @@ function ContentTab() {
             <h3 className="text-lg font-bold">Site Stats</h3>
             {statsEdit ? (
               <div className="flex gap-2">
-                <button onClick={() => saveStats.mutate(statsEdit)}
-                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background">Save All</button>
-                <button onClick={() => setStatsEdit(null)} className="rounded-full border border-border px-4 py-2 text-xs font-bold">Cancel</button>
+                <button
+                  onClick={() => saveStats.mutate(statsEdit)}
+                  className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
+                >
+                  Save All
+                </button>
+                <button
+                  onClick={() => setStatsEdit(null)}
+                  className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
-              <button onClick={() => setStatsEdit(statsQ.data ? [...statsQ.data] : [])}
-                className="rounded-full border border-border px-4 py-2 text-xs font-bold">Edit</button>
+              <button
+                onClick={() => setStatsEdit(statsQ.data ? [...statsQ.data] : [])}
+                className="rounded-full border border-border px-4 py-2 text-xs font-bold"
+              >
+                Edit
+              </button>
             )}
           </div>
           <p className="text-sm text-muted-foreground">These appear in the homepage stats strip.</p>
           {(statsEdit ?? statsQ.data ?? []).map((stat, i) => (
-            <div key={stat.id} className="flex items-center gap-3 rounded-xl border border-border p-4">
+            <div
+              key={stat.id}
+              className="flex items-center gap-3 rounded-xl border border-border p-4"
+            >
               {statsEdit ? (
                 <>
-                  <input className="w-24 rounded-lg border border-border px-3 py-2 text-sm font-black"
+                  <input
+                    className="w-24 rounded-lg border border-border px-3 py-2 text-sm font-black"
                     value={statsEdit[i]?.value ?? ""}
-                    onChange={(e) => setStatsEdit((v) => v ? v.map((s, j) => j === i ? { ...s, value: e.target.value } : s) : v)} />
-                  <input className="flex-1 rounded-lg border border-border px-3 py-2 text-sm"
+                    onChange={(e) =>
+                      setStatsEdit((v) =>
+                        v ? v.map((s, j) => (j === i ? { ...s, value: e.target.value } : s)) : v,
+                      )
+                    }
+                  />
+                  <input
+                    className="flex-1 rounded-lg border border-border px-3 py-2 text-sm"
                     value={statsEdit[i]?.label ?? ""}
-                    onChange={(e) => setStatsEdit((v) => v ? v.map((s, j) => j === i ? { ...s, label: e.target.value } : s) : v)} />
+                    onChange={(e) =>
+                      setStatsEdit((v) =>
+                        v ? v.map((s, j) => (j === i ? { ...s, label: e.target.value } : s)) : v,
+                      )
+                    }
+                  />
                 </>
               ) : (
                 <>
@@ -3140,21 +4220,37 @@ const BADGE_COLOR_STYLES: Record<string, string> = {
 
 function OffersTab() {
   const qc = useQueryClient();
-  const [modal, setModal] = useState<{ mode: "add" | "edit"; id?: number; data: OfferPayload } | null>(null);
+  const [modal, setModal] = useState<{
+    mode: "add" | "edit";
+    id?: number;
+    data: OfferPayload;
+  } | null>(null);
   const offersQuery = useQuery({ queryKey: ["admin-offers"], queryFn: api.adminOffers });
   const offers = offersQuery.data ?? [];
 
   const createMut = useMutation({
     mutationFn: (data: OfferPayload) => api.adminCreateOffer(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); setModal(null); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-offers"] });
+      qc.invalidateQueries({ queryKey: ["offers"] });
+      setModal(null);
+    },
   });
   const updateMut = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<OfferPayload> }) => api.adminUpdateOffer(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); setModal(null); },
+    mutationFn: ({ id, data }: { id: number; data: Partial<OfferPayload> }) =>
+      api.adminUpdateOffer(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-offers"] });
+      qc.invalidateQueries({ queryKey: ["offers"] });
+      setModal(null);
+    },
   });
   const deleteMut = useMutation({
     mutationFn: (id: number) => api.adminDeleteOffer(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-offers"] }); qc.invalidateQueries({ queryKey: ["offers"] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-offers"] });
+      qc.invalidateQueries({ queryKey: ["offers"] });
+    },
   });
 
   const [formData, setFormData] = useState<OfferPayload>(EMPTY_OFFER);
@@ -3196,10 +4292,14 @@ function OffersTab() {
 
   function formatDiscount(offer: ApiOffer) {
     switch (offer.offer_type) {
-      case "percent": return `${offer.discount_value}% OFF`;
-      case "fixed": return `₹${offer.discount_value.toLocaleString()} OFF`;
-      case "free_upgrade": return "FREE UPGRADE";
-      case "flash": return `${offer.discount_value}% FLASH`;
+      case "percent":
+        return `${offer.discount_value}% OFF`;
+      case "fixed":
+        return `₹${offer.discount_value.toLocaleString()} OFF`;
+      case "free_upgrade":
+        return "FREE UPGRADE";
+      case "flash":
+        return `${offer.discount_value}% FLASH`;
     }
   }
 
@@ -3210,7 +4310,9 @@ function OffersTab() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold">Offers & Promotions</h3>
-          <p className="text-sm text-muted-foreground">{offers.length} offer{offers.length !== 1 ? "s" : ""} total</p>
+          <p className="text-sm text-muted-foreground">
+            {offers.length} offer{offers.length !== 1 ? "s" : ""} total
+          </p>
         </div>
         <button
           onClick={openAdd}
@@ -3238,31 +4340,47 @@ function OffersTab() {
               <div className="flex items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${BADGE_COLOR_STYLES[offer.badge_color] ?? BADGE_COLOR_STYLES.accent}`}>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${BADGE_COLOR_STYLES[offer.badge_color] ?? BADGE_COLOR_STYLES.accent}`}
+                    >
                       {offer.badge_label}
                     </span>
-                    <span className="text-xl font-black tracking-tighter">{formatDiscount(offer)}</span>
+                    <span className="text-xl font-black tracking-tighter">
+                      {formatDiscount(offer)}
+                    </span>
                     {offer.is_featured && (
-                      <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-[10px] font-bold uppercase">Featured</span>
+                      <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 text-[10px] font-bold uppercase">
+                        Featured
+                      </span>
                     )}
                     {!offer.is_active && (
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">Inactive</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                        Inactive
+                      </span>
                     )}
                   </div>
                   <p className="font-bold text-sm">{offer.title}</p>
-                  {offer.subtitle && <p className="text-xs text-accent font-semibold mt-0.5">{offer.subtitle}</p>}
+                  {offer.subtitle && (
+                    <p className="text-xs text-accent font-semibold mt-0.5">{offer.subtitle}</p>
+                  )}
                   {offer.code && (
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">Code: {offer.code}</p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      Code: {offer.code}
+                    </p>
                   )}
                   {offer.max_uses != null && (
                     <div className="mt-2">
                       <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>{offer.current_uses} / {offer.max_uses} used</span>
+                        <span>
+                          {offer.current_uses} / {offer.max_uses} used
+                        </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-secondary overflow-hidden w-48">
                         <div
                           className="h-full rounded-full bg-accent transition-all"
-                          style={{ width: `${Math.min(100, (offer.current_uses / offer.max_uses) * 100)}%` }}
+                          style={{
+                            width: `${Math.min(100, (offer.current_uses / offer.max_uses) * 100)}%`,
+                          }}
                         />
                       </div>
                     </div>
@@ -3277,7 +4395,9 @@ function OffersTab() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => updateMut.mutate({ id: offer.id, data: { is_active: !offer.is_active } })}
+                    onClick={() =>
+                      updateMut.mutate({ id: offer.id, data: { is_active: !offer.is_active } })
+                    }
                     disabled={updateMut.isPending}
                     className={`rounded-full px-3 py-1.5 text-xs font-bold border transition-colors ${offer.is_active ? "border-emerald-300 text-emerald-700 hover:bg-emerald-50" : "border-border text-muted-foreground hover:bg-secondary"}`}
                   >
@@ -3306,18 +4426,28 @@ function OffersTab() {
       {/* Add/Edit Modal */}
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setModal(null)} />
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setModal(null)}
+          />
           <div className="relative z-10 w-full max-w-xl rounded-2xl bg-background shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border p-6">
-              <h3 className="text-lg font-extrabold">{modal.mode === "add" ? "Create Offer" : "Edit Offer"}</h3>
-              <button onClick={() => setModal(null)} className="rounded-full p-1.5 hover:bg-secondary">
+              <h3 className="text-lg font-extrabold">
+                {modal.mode === "add" ? "Create Offer" : "Edit Offer"}
+              </h3>
+              <button
+                onClick={() => setModal(null)}
+                className="rounded-full p-1.5 hover:bg-secondary"
+              >
                 <X className="size-5" />
               </button>
             </div>
             <div className="space-y-4 p-6">
               {/* Title */}
               <div>
-                <label className="mb-1.5 block text-sm font-bold">Title <span className="text-red-500">*</span></label>
+                <label className="mb-1.5 block text-sm font-bold">
+                  Title <span className="text-red-500">*</span>
+                </label>
                 <input
                   value={formData.title}
                   onChange={(e) => setFormData((f) => ({ ...f, title: e.target.value }))}
@@ -3341,7 +4471,12 @@ function OffersTab() {
                   <label className="mb-1.5 block text-sm font-bold">Type</label>
                   <select
                     value={formData.offer_type}
-                    onChange={(e) => setFormData((f) => ({ ...f, offer_type: e.target.value as OfferPayload["offer_type"] }))}
+                    onChange={(e) =>
+                      setFormData((f) => ({
+                        ...f,
+                        offer_type: e.target.value as OfferPayload["offer_type"],
+                      }))
+                    }
                     className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                   >
                     <option value="percent">Percent</option>
@@ -3355,7 +4490,9 @@ function OffersTab() {
                   <input
                     type="number"
                     value={formData.discount_value}
-                    onChange={(e) => setFormData((f) => ({ ...f, discount_value: Number(e.target.value) }))}
+                    onChange={(e) =>
+                      setFormData((f) => ({ ...f, discount_value: Number(e.target.value) }))
+                    }
                     className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                     min="0"
                   />
@@ -3366,7 +4503,9 @@ function OffersTab() {
                 <label className="mb-1.5 block text-sm font-bold">Promo code</label>
                 <input
                   value={formData.code ?? ""}
-                  onChange={(e) => setFormData((f) => ({ ...f, code: e.target.value || undefined }))}
+                  onChange={(e) =>
+                    setFormData((f) => ({ ...f, code: e.target.value || undefined }))
+                  }
                   className="w-full rounded-xl border border-border px-3 py-2.5 text-sm font-mono focus:border-accent focus:outline-none"
                   placeholder="e.g. EARLYBIRD25"
                 />
@@ -3385,7 +4524,12 @@ function OffersTab() {
                   <label className="mb-1.5 block text-sm font-bold">Badge color</label>
                   <select
                     value={formData.badge_color ?? "accent"}
-                    onChange={(e) => setFormData((f) => ({ ...f, badge_color: e.target.value as OfferPayload["badge_color"] }))}
+                    onChange={(e) =>
+                      setFormData((f) => ({
+                        ...f,
+                        badge_color: e.target.value as OfferPayload["badge_color"],
+                      }))
+                    }
                     className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                   >
                     <option value="accent">Accent (orange)</option>
@@ -3402,7 +4546,9 @@ function OffersTab() {
                   <input
                     type="date"
                     value={formData.valid_from ?? ""}
-                    onChange={(e) => setFormData((f) => ({ ...f, valid_from: e.target.value || undefined }))}
+                    onChange={(e) =>
+                      setFormData((f) => ({ ...f, valid_from: e.target.value || undefined }))
+                    }
                     className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                   />
                 </div>
@@ -3411,7 +4557,9 @@ function OffersTab() {
                   <input
                     type="date"
                     value={formData.valid_until ?? ""}
-                    onChange={(e) => setFormData((f) => ({ ...f, valid_until: e.target.value || undefined }))}
+                    onChange={(e) =>
+                      setFormData((f) => ({ ...f, valid_until: e.target.value || undefined }))
+                    }
                     className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                   />
                 </div>
@@ -3422,7 +4570,12 @@ function OffersTab() {
                 <input
                   type="number"
                   value={formData.max_uses ?? ""}
-                  onChange={(e) => setFormData((f) => ({ ...f, max_uses: e.target.value ? Number(e.target.value) : undefined }))}
+                  onChange={(e) =>
+                    setFormData((f) => ({
+                      ...f,
+                      max_uses: e.target.value ? Number(e.target.value) : undefined,
+                    }))
+                  }
                   className="w-full rounded-xl border border-border px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
                   placeholder="Leave empty for unlimited"
                   min="1"
@@ -3508,7 +4661,9 @@ function PagesTab() {
   function getValue(section: string, key: string): string {
     const editKey = getEditKey(section, key);
     if (editKey in edits) return edits[editKey];
-    return (allContent?.[activePage]?.[section]?.[key] as { value: string } | undefined)?.value ?? "";
+    return (
+      (allContent?.[activePage]?.[section]?.[key] as { value: string } | undefined)?.value ?? ""
+    );
   }
 
   function handleChange(section: string, key: string, value: string) {
@@ -3548,13 +4703,21 @@ function PagesTab() {
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       {/* Page list */}
       <div className="flex flex-col gap-1">
-        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Pages</p>
+        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Pages
+        </p>
         {pages.map((p) => (
           <button
             key={p}
-            onClick={() => { setActivePage(p); setEdits({}); setSaved(false); }}
+            onClick={() => {
+              setActivePage(p);
+              setEdits({});
+              setSaved(false);
+            }}
             className={`rounded-xl px-4 py-2.5 text-left text-sm font-bold transition-colors ${
-              activePage === p ? "bg-foreground text-background" : "text-muted-foreground hover:bg-secondary"
+              activePage === p
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-secondary"
             }`}
           >
             {PAGE_LABELS[p] ?? p}
@@ -3568,7 +4731,10 @@ function PagesTab() {
           <h3 className="text-lg font-extrabold">{PAGE_LABELS[activePage] ?? activePage}</h3>
           <div className="flex items-center gap-3">
             {Object.keys(edits).length > 0 && (
-              <span className="text-xs text-muted-foreground">{Object.keys(edits).length} unsaved change{Object.keys(edits).length !== 1 ? "s" : ""}</span>
+              <span className="text-xs text-muted-foreground">
+                {Object.keys(edits).length} unsaved change
+                {Object.keys(edits).length !== 1 ? "s" : ""}
+              </span>
             )}
             {saved && <span className="text-xs font-bold text-green-600">✓ Saved</span>}
             <button
@@ -3588,14 +4754,24 @@ function PagesTab() {
                 {section.replace(/_/g, " ")}
               </p>
               <div className="grid gap-4">
-                {Object.entries(fields as Record<string, { value: string; label: string; value_type: string; sort_order: number }>)
+                {Object.entries(
+                  fields as Record<
+                    string,
+                    { value: string; label: string; value_type: string; sort_order: number }
+                  >,
+                )
                   .sort((a, b) => (a[1].sort_order ?? 0) - (b[1].sort_order ?? 0))
                   .map(([key, meta]) => (
                     <div key={key}>
                       <label className="mb-1.5 block text-xs font-bold text-foreground/70">
                         {meta.label || key}
                       </label>
-                      {(meta.value_type === "text" && (getValue(section, key).length > 80 || key.includes("body") || key.includes("description") || key.includes("tagline") || key.includes("subtitle"))) ? (
+                      {meta.value_type === "text" &&
+                      (getValue(section, key).length > 80 ||
+                        key.includes("body") ||
+                        key.includes("description") ||
+                        key.includes("tagline") ||
+                        key.includes("subtitle")) ? (
                         <textarea
                           rows={3}
                           value={getValue(section, key)}

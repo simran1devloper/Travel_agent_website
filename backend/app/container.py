@@ -78,7 +78,7 @@ def build_container(settings: Settings) -> Container:
 
     # ── Infrastructure ──────────────────────────────────────────────────────
     db = SQLiteDatabase(str(settings.database_path))
-    file_storage = LocalFileStorage()
+    file_storage = LocalFileStorage(str(settings.upload_dir))
 
     # ── Outbound repository adapters ────────────────────────────────────────
     customer_repo = SQLiteCustomerRepository(db)

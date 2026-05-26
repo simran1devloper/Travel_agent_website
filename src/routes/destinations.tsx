@@ -62,21 +62,80 @@ type Destination = {
 
 function galleryFallback(slug: string): GalleryItem[] {
   return [
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-01/600/800`, caption: "Featured moment", author: "JourneyMakers traveler" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-02/800/600`, caption: "Local scene", author: "Verified traveler" },
-    { type: "video", src: `https://picsum.photos/seed/${slug}-reel/600/400`, caption: "Journey highlights", author: "Community moment" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-04/600/800`, caption: "Hidden gems", author: "JourneyMakers guide" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-05/800/600`, caption: "Local culture", author: "Featured traveler" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-06/600/800`, caption: "City exploration", author: "JourneyMakers experience" },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-01/600/800`,
+      caption: "Featured moment",
+      author: "JourneyMakers traveler",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-02/800/600`,
+      caption: "Local scene",
+      author: "Verified traveler",
+    },
+    {
+      type: "video",
+      src: `https://picsum.photos/seed/${slug}-reel/600/400`,
+      caption: "Journey highlights",
+      author: "Community moment",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-04/600/800`,
+      caption: "Hidden gems",
+      author: "JourneyMakers guide",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-05/800/600`,
+      caption: "Local culture",
+      author: "Featured traveler",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-06/600/800`,
+      caption: "City exploration",
+      author: "JourneyMakers experience",
+    },
   ];
 }
 
+const assetMediaByName: Record<string, string> = {
+  "bangkok & singapore.jpeg": MEDIA.destinations["bangkok-singapore"],
+  "newyork.jpg": MEDIA.destinations.newyork,
+  "salonei.jpeg": MEDIA.destinations.salonei,
+  "swizerland.jpeg": MEDIA.destinations.switzerland,
+  "tokyo & seoul.jpeg": MEDIA.destinations["tokyo-seoul"],
+  "vitenam.jpeg": MEDIA.destinations.vietnam,
+};
+
+function resolveDestinationImage(url: string | undefined, slug: string) {
+  if (!url) return MEDIA.destinations[slug] ?? `https://picsum.photos/seed/${slug}/800/600`;
+  if (url.startsWith("/assets/")) {
+    const assetName = decodeURIComponent(url.split("/").pop() ?? "").toLowerCase();
+    return (
+      assetMediaByName[assetName] ??
+      MEDIA.destinations[slug] ??
+      `https://picsum.photos/seed/${slug}/800/600`
+    );
+  }
+  return url;
+}
+
 function mapApiDestination(d: ApiDestination): Destination {
-  const gallery = (d.gallery ?? []).length > 0 ? (d.gallery as GalleryItem[]) : galleryFallback(d.slug);
+  const image = resolveDestinationImage(d.image_url, d.slug);
+  const gallery =
+    (d.gallery ?? []).length > 0
+      ? (d.gallery as GalleryItem[]).map((item) => ({
+          ...item,
+          src: resolveDestinationImage(item.src, d.slug),
+        }))
+      : galleryFallback(d.slug);
   return {
     slug: d.slug,
     name: d.name,
-    image: MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
+    image,
     packagesCount: d.packages_count,
     tagline: d.tagline,
     duration: d.duration,
@@ -86,7 +145,6 @@ function mapApiDestination(d: ApiDestination): Destination {
     gallery,
   };
 }
-
 
 const destinationProfiles: Record<
   string,
@@ -198,12 +256,18 @@ function Hero() {
     <section className="section-shell pb-14 pt-20 md:pb-20 md:pt-28">
       <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
         <div className="max-w-3xl">
-          <span className="eyebrow mb-6">{c("hero", "eyebrow", "124+ destinations, shared by travelers")}</span>
+          <span className="eyebrow mb-6">
+            {c("hero", "eyebrow", "124+ destinations, shared by travelers")}
+          </span>
           <h1 className="display-title mb-6 text-5xl md:text-7xl">
             {c("hero", "title", "Discover places through people who have been there.")}
           </h1>
           <p className="body-copy text-lg">
-            {c("hero", "body", "Browse destinations by traveler memories, community favorites, and curated journeys you can build from saved moments.")}
+            {c(
+              "hero",
+              "body",
+              "Browse destinations by traveler memories, community favorites, and curated journeys you can build from saved moments.",
+            )}
           </p>
           <div className="mt-8 grid gap-3 sm:grid-cols-3">
             <Metric value="12,400+" label="shared experiences" />
@@ -285,21 +349,52 @@ function DestinationGrid() {
   // Real tag-based filtering using destination name/slug/tagline patterns
   const filteredDestinations = destinations.filter((d) => {
     if (activeFilter === "all") return true;
-    const searchable = `${d.name} ${d.slug} ${d.tagline ?? ""} ${destinationProfiles[d.slug]?.mood ?? ""} ${destinationProfiles[d.slug]?.bestFor ?? ""}`.toLowerCase();
+    const searchable =
+      `${d.name} ${d.slug} ${d.tagline ?? ""} ${destinationProfiles[d.slug]?.mood ?? ""} ${destinationProfiles[d.slug]?.bestFor ?? ""}`.toLowerCase();
     if (activeFilter === "city") {
-      return searchable.includes("city") || searchable.includes("pulse") || searchable.includes("urban") || searchable.includes("nightlife") || d.slug === "bangkok-singapore" || d.slug === "newyork" || d.slug === "tokyo-seoul";
+      return (
+        searchable.includes("city") ||
+        searchable.includes("pulse") ||
+        searchable.includes("urban") ||
+        searchable.includes("nightlife") ||
+        d.slug === "bangkok-singapore" ||
+        d.slug === "newyork" ||
+        d.slug === "tokyo-seoul"
+      );
     }
     if (activeFilter === "nature") {
-      return searchable.includes("nature") || searchable.includes("mountain") || searchable.includes("adventure") || searchable.includes("river");
+      return (
+        searchable.includes("nature") ||
+        searchable.includes("mountain") ||
+        searchable.includes("adventure") ||
+        searchable.includes("river")
+      );
     }
     if (activeFilter === "beach") {
-      return searchable.includes("beach") || searchable.includes("coastal") || searchable.includes("coast") || searchable.includes("island") || d.slug === "salonei";
+      return (
+        searchable.includes("beach") ||
+        searchable.includes("coastal") ||
+        searchable.includes("coast") ||
+        searchable.includes("island") ||
+        d.slug === "salonei"
+      );
     }
     if (activeFilter === "culture") {
-      return searchable.includes("culture") || searchable.includes("art") || searchable.includes("temple") || searchable.includes("design") || searchable.includes("food");
+      return (
+        searchable.includes("culture") ||
+        searchable.includes("art") ||
+        searchable.includes("temple") ||
+        searchable.includes("design") ||
+        searchable.includes("food")
+      );
     }
     if (activeFilter === "alpine") {
-      return searchable.includes("alpine") || searchable.includes("mountain") || searchable.includes("rail") || d.slug === "switzerland";
+      return (
+        searchable.includes("alpine") ||
+        searchable.includes("mountain") ||
+        searchable.includes("rail") ||
+        d.slug === "switzerland"
+      );
     }
     return true;
   });

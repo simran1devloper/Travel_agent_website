@@ -48,7 +48,7 @@ class ReviewService:
         # Recalculate package rating after inserting
         rating, count = self._reviews.get_rating_stats(slug)
         self._packages.update_rating(slug, rating, count, now)
-        return {"id": public_id, "status": "pending"}
+        return {"id": public_id, "status": "approved"}
 
     def delete(self, public_id: str, customer_id: int) -> dict[str, str]:
         review = self._reviews.find_by_public_id(public_id)

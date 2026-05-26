@@ -14,9 +14,14 @@ export const MEDIA = {
   destinations: {
     "bangkok-singapore": bangkokSingapore,
     newyork: newYork,
+    "newyork-citypulse": newYork,
     salonei: salonei,
+    "salonei-retreat": salonei,
     switzerland: switzerland,
+    "switzerland-alpine": switzerland,
     "tokyo-seoul": tokyoSeoul,
+    "tokyo-seoul-fusion": tokyoSeoul,
     vietnam: vietnam,
+    "vietnam-river": vietnam,
   } as Record<string, string>,
 };

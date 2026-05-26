@@ -67,7 +67,7 @@ class SQLiteReviewRepository(IReviewRepository):
                 INSERT INTO reviews
                 (public_id, customer_id, package_slug, rating, title, body, trip_date,
                  media_urls, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)
                 """,
                 (
                     data["public_id"], data["customer_id"], data["package_slug"],

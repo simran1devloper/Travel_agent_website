@@ -19,6 +19,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from ....domain.exceptions import NotFoundError
 from ....application.destination_service import DestinationService
 from ....application.faq_service import FaqService
 from ....application.package_service import PackageService
@@ -112,6 +113,33 @@ _TEMPLATES: dict[str, tuple[list[str], list[str]]] = {
 }
 
 SUPPORTED_KINDS = list(_TEMPLATES.keys())
+
+
+def _decode_csv_upload(content: bytes) -> str:
+    """Decode CSV uploads from common spreadsheet encodings.
+
+    Excel and browser downloads can produce CSV files in UTF-8, UTF-8 with BOM,
+    UTF-16, or Windows-1252. Windows-1252 is especially common when smart quotes
+    are present, and strict UTF-8 decoding turns those files into 500 errors.
+    """
+    for encoding in ("utf-8-sig", "utf-16", "cp1252", "latin-1"):
+        try:
+            return content.decode(encoding)
+        except UnicodeError:
+            continue
+
+    raise HTTPException(
+        status_code=400,
+        detail="Could not decode CSV. Please upload a UTF-8, UTF-16, or Windows CSV file.",
+    )
+
+
+def _package_exists(svc: PackageService, slug: str) -> bool:
+    try:
+        svc.get_by_slug(slug)
+        return True
+    except NotFoundError:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +310,7 @@ def _coerce(raw: dict[str, str], kind: str) -> dict[str, Any]:
 @router.post("/admin/import/{kind}", dependencies=[Depends(require_admin)])
 async def import_csv(
     kind: str,
+    conflict: str = "skip",
     file: UploadFile = File(...),
     pkg_svc: PackageService = Depends(get_package_service),
     dest_svc: DestinationService = Depends(get_destination_service),
@@ -303,12 +332,31 @@ async def import_csv(
             status_code=400,
             detail=f"Unsupported kind '{kind}'. Must be one of: {', '.join(SUPPORTED_KINDS)}",
         )
+    if conflict not in {"skip", "update"}:
+        raise HTTPException(status_code=400, detail="conflict must be 'skip' or 'update'.")
 
-    raw_content = (await file.read()).decode("utf-8-sig")
-    raw_rows = list(csv.DictReader(io.StringIO(raw_content)))
+    raw_content = _decode_csv_upload(await file.read())
+    reader = csv.DictReader(io.StringIO(raw_content))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV is empty or missing a header row.")
+
+    expected_fields, _ = _TEMPLATES[kind]
+    headers = {field.strip() for field in reader.fieldnames if field and field.strip()}
+    missing_headers = [field for field in expected_fields if field not in headers]
+    if missing_headers:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CSV is missing required columns: {', '.join(missing_headers)}",
+        )
+
+    raw_rows = list(reader)
 
     imported = 0
+    updated = 0
+    skipped = 0
     errors: list[dict[str, Any]] = []
+    conflicts: list[dict[str, Any]] = []
+    destination_slugs = {row["slug"] for row in dest_svc.list_all()}
 
     for i, raw_row in enumerate(raw_rows, start=2):  # row 2 = first data row (1 = header)
         # Strip whitespace from keys and values; drop empty-key columns
@@ -319,24 +367,65 @@ async def import_csv(
 
             match kind:
                 case "packages":
-                    pkg_svc.create(PackageCreate(**coerced))
+                    payload = PackageCreate(**coerced)
+                    exists = _package_exists(pkg_svc, payload.slug)
+                    if exists and conflict == "update":
+                        pkg_svc.update(payload.slug, payload)
+                        updated += 1
+                    elif exists:
+                        skipped += 1
+                        conflicts.append(
+                            {
+                                "row": i,
+                                "id": payload.slug,
+                                "message": "Package slug already exists; skipped.",
+                            }
+                        )
+                    else:
+                        pkg_svc.create(payload)
+                        imported += 1
                 case "destinations":
-                    dest_svc.create(DestinationCreate(**coerced))
+                    payload = DestinationCreate(**coerced)
+                    exists = payload.slug in destination_slugs
+                    if exists and conflict == "update":
+                        dest_svc.update(payload.slug, payload)
+                        updated += 1
+                    elif exists:
+                        skipped += 1
+                        conflicts.append(
+                            {
+                                "row": i,
+                                "id": payload.slug,
+                                "message": "Destination slug already exists; skipped.",
+                            }
+                        )
+                    else:
+                        dest_svc.create(payload)
+                        destination_slugs.add(payload.slug)
+                        imported += 1
                 case "planners":
                     planner_svc.create(PlannerCreate(**coerced))
+                    imported += 1
                 case "services":
                     service_svc.upsert(ServiceCreate(**coerced))
+                    imported += 1
                 case "faqs":
                     faq_svc.create(FaqCreate(**coerced))
+                    imported += 1
                 case "testimonials":
                     testimonial_svc.create(TestimonialCreate(**coerced))
-
-            imported += 1
+                    imported += 1
 
         except Exception as exc:  # noqa: BLE001
             errors.append({"row": i, "message": str(exc)})
 
-    return {"imported": imported, "errors": errors}
+    return {
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
+        "conflicts": conflicts,
+    }
 
 
 # ---------------------------------------------------------------------------

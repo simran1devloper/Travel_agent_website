@@ -33,54 +33,116 @@ import { saveHeroSearch } from "@/lib/search-state";
 import { type ApiOffer } from "@/lib/api";
 import { useContent } from "@/lib/use-content";
 import { MEDIA } from "@/config/media";
-import { api, type ApiPackage, type ApiDestination, type ApiGalleryItem } from "@/lib/api";
+import {
+  API_BASE_URL,
+  api,
+  type ApiPackage,
+  type ApiDestination,
+  type ApiGalleryItem,
+} from "@/lib/api";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
+import { ReviewForm } from "@/components/review-form";
 
 // ── Shape mappers ─────────────────────────────────────────────────────────────
 
 type GalleryItem = ApiGalleryItem;
 
+function resolveReviewMediaUrl(url: string) {
+  return url.startsWith("/") ? `${API_BASE_URL}${url}` : url;
+}
+
+function isVideoMedia(url: string) {
+  return /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url);
+}
+
 function galleryFallback(slug: string): GalleryItem[] {
   return [
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-01/600/800`, caption: "Featured moment", author: "JourneyMakers traveler" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-02/800/600`, caption: "Local scene", author: "Verified traveler" },
-    { type: "video", src: `https://picsum.photos/seed/${slug}-reel/600/400`, caption: "Journey highlights", author: "Community moment" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-04/600/800`, caption: "Hidden gems", author: "JourneyMakers guide" },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-01/600/800`,
+      caption: "Featured moment",
+      author: "JourneyMakers traveler",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-02/800/600`,
+      caption: "Local scene",
+      author: "Verified traveler",
+    },
+    {
+      type: "video",
+      src: `https://picsum.photos/seed/${slug}-reel/600/400`,
+      caption: "Journey highlights",
+      author: "Community moment",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-04/600/800`,
+      caption: "Hidden gems",
+      author: "JourneyMakers guide",
+    },
   ];
 }
 
 type MappedPackage = {
-  slug: string; title: string; location: string; days: number; price: number;
-  category: string; image: string; tagline?: string; rating: number; reviewCount: number;
+  slug: string;
+  title: string;
+  location: string;
+  days: number;
+  price: number;
+  category: string;
+  image: string;
+  tagline?: string;
+  rating: number;
+  reviewCount: number;
 };
 
 type MappedDestination = {
-  slug: string; name: string; image: string; packagesCount: number; tagline?: string;
-  duration?: string; price: number; rating: number; reviewCount: number;
+  slug: string;
+  name: string;
+  image: string;
+  packagesCount: number;
+  tagline?: string;
+  duration?: string;
+  price: number;
+  rating: number;
+  reviewCount: number;
   gallery: GalleryItem[];
 };
 
 function mapPkg(p: ApiPackage): MappedPackage {
   return {
-    slug: p.slug, title: p.title, location: p.location, days: p.days, price: p.price,
+    slug: p.slug,
+    title: p.title,
+    location: p.location,
+    days: p.days,
+    price: p.price,
     category: p.category ?? "Journey",
-    image: MEDIA.destinations?.[p.slug] ?? p.image_url ?? `https://picsum.photos/seed/${p.slug}/800/600`,
-    tagline: p.tagline, rating: p.rating ?? 4.8, reviewCount: p.review_count,
+    image:
+      MEDIA.destinations?.[p.slug] ?? p.image_url ?? `https://picsum.photos/seed/${p.slug}/800/600`,
+    tagline: p.tagline,
+    rating: p.rating ?? 4.8,
+    reviewCount: p.review_count,
   };
 }
 
 function mapDest(d: ApiDestination): MappedDestination {
   return {
-    slug: d.slug, name: d.name,
-    image: MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
-    packagesCount: d.packages_count, tagline: d.tagline, duration: d.duration,
-    price: d.price ?? 0, rating: d.rating ?? 4.8, reviewCount: d.review_count,
+    slug: d.slug,
+    name: d.name,
+    image:
+      MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
+    packagesCount: d.packages_count,
+    tagline: d.tagline,
+    duration: d.duration,
+    price: d.price ?? 0,
+    rating: d.rating ?? 4.8,
+    reviewCount: d.review_count,
     gallery: (d.gallery ?? []).length > 0 ? (d.gallery as GalleryItem[]) : galleryFallback(d.slug),
   };
 }
-
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -165,13 +227,21 @@ function Hero() {
             {c("hero", "badge", "Traveler-led luxury planning")}
           </span>
           <p className="mb-4 max-w-2xl text-base font-semibold uppercase tracking-normal text-white/76">
-            {c("hero", "tagline", "Discover places through the moments travelers never stopped talking about.")}
+            {c(
+              "hero",
+              "tagline",
+              "Discover places through the moments travelers never stopped talking about.",
+            )}
           </p>
           <h1 className="mb-8 max-w-5xl text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_6px_34px_rgba(0,0,0,0.35)] md:text-7xl lg:text-8xl">
             {c("hero", "title", "Build your journey from living memories.")}
           </h1>
           <p className="mb-10 max-w-2xl text-base leading-8 text-white/86 md:text-lg">
-            {c("hero", "subtitle", "Save cinematic traveler moments, feel the mood of every stop, then turn your collection into a private itinerary with concierge support.")}
+            {c(
+              "hero",
+              "subtitle",
+              "Save cinematic traveler moments, feel the mood of every stop, then turn your collection into a private itinerary with concierge support.",
+            )}
           </p>
 
           <div className="mb-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
@@ -282,15 +352,16 @@ function StatsStrip() {
     queryFn: api.siteStats,
   });
 
-  if (isLoading) return (
-    <section className="border-y border-white/10 bg-[#0e1726] py-10">
-      <div className="section-shell grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-24 rounded-2xl bg-white/10 animate-pulse" />
-        ))}
-      </div>
-    </section>
-  );
+  if (isLoading)
+    return (
+      <section className="border-y border-white/10 bg-[#0e1726] py-10">
+        <div className="section-shell grid grid-cols-2 gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 rounded-2xl bg-white/10 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
 
   return (
     <section className="border-y border-white/10 bg-[#0e1726] py-10 text-background">
@@ -318,12 +389,17 @@ function useCountdownSimple(until: string | undefined) {
     const target = new Date(until).getTime();
     function tick() {
       const diff = target - Date.now();
-      if (diff <= 0) { setTimeLeft("Ended"); return; }
+      if (diff <= 0) {
+        setTimeLeft("Ended");
+        return;
+      }
       const d = Math.floor(diff / 86400000);
       const h = Math.floor((diff % 86400000) / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
-      setTimeLeft(`${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`);
+      setTimeLeft(
+        `${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`,
+      );
     }
     tick();
     const id = setInterval(tick, 1000);
@@ -338,10 +414,14 @@ function OffersStripCard({ offer }: { offer: ApiOffer }) {
   const Icon = isFlash ? Zap : offer.offer_type === "fixed" ? Gift : Tag;
   function formatDiscount() {
     switch (offer.offer_type) {
-      case "percent": return `${offer.discount_value}% OFF`;
-      case "fixed": return `₹${offer.discount_value.toLocaleString()} OFF`;
-      case "free_upgrade": return "FREE UPGRADE";
-      case "flash": return `${offer.discount_value}% FLASH`;
+      case "percent":
+        return `${offer.discount_value}% OFF`;
+      case "fixed":
+        return `₹${offer.discount_value.toLocaleString()} OFF`;
+      case "free_upgrade":
+        return "FREE UPGRADE";
+      case "flash":
+        return `${offer.discount_value}% FLASH`;
     }
   }
   return (
@@ -353,13 +433,19 @@ function OffersStripCard({ offer }: { offer: ApiOffer }) {
     >
       <div className="flex items-center gap-2 mb-3">
         <Icon className={`size-4 ${isFlash ? "text-red-500" : "text-accent"}`} />
-        <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">{offer.badge_label}</span>
+        <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground">
+          {offer.badge_label}
+        </span>
       </div>
-      <div className={`text-2xl font-black tracking-tighter ${isFlash ? "text-red-500" : "text-foreground"}`}>
+      <div
+        className={`text-2xl font-black tracking-tighter ${isFlash ? "text-red-500" : "text-foreground"}`}
+      >
         {formatDiscount()}
       </div>
       <p className="mt-1 text-sm font-bold line-clamp-1">{offer.title}</p>
-      {offer.subtitle && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{offer.subtitle}</p>}
+      {offer.subtitle && (
+        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{offer.subtitle}</p>
+      )}
       {countdown && offer.valid_until && (
         <div className="mt-3 flex items-center gap-1 text-[10px] font-mono text-red-600">
           <Clock className="size-3" /> {countdown}
@@ -385,7 +471,10 @@ function OffersStrip() {
             <Zap className="size-5 text-accent" />
             <span className="text-sm font-extrabold uppercase tracking-widest">Live Offers</span>
           </div>
-          <Link to="/offers" className="text-sm font-bold text-accent hover:underline flex items-center gap-1">
+          <Link
+            to="/offers"
+            className="text-sm font-bold text-accent hover:underline flex items-center gap-1"
+          >
             View all <ArrowUpRight className="size-3.5" />
           </Link>
         </div>
@@ -419,16 +508,27 @@ function CinematicMoment() {
       <div className="relative flex min-h-[78vh] items-end px-6 py-16 md:px-12 lg:px-20">
         <div className="max-w-4xl">
           <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-extrabold backdrop-blur-md">
-            <Sparkles className="size-4 text-[#d7aa73]" /> {c("cinematic_moment", "badge", "Cinematic Moment")}
+            <Sparkles className="size-4 text-[#d7aa73]" />{" "}
+            {c("cinematic_moment", "badge", "Cinematic Moment")}
           </div>
           <h2 className="mb-8 text-balance text-5xl font-black leading-[1.02] md:text-7xl">
-            {c("cinematic_moment", "title", "One saved memory can become the reason for the whole journey.")}
+            {c(
+              "cinematic_moment",
+              "title",
+              "One saved memory can become the reason for the whole journey.",
+            )}
           </h2>
           {quote && (
             <figure className="max-w-2xl border-l border-white/30 pl-6">
               <Quote className="mb-4 size-8 text-[#d7aa73]" />
               <blockquote className="text-2xl font-semibold leading-10 text-white/90">
-                "{quote.caption} {c("cinematic_moment", "quote_suffix", "felt like the world went quiet for a few minutes.")}"
+                "{quote.caption}{" "}
+                {c(
+                  "cinematic_moment",
+                  "quote_suffix",
+                  "felt like the world went quiet for a few minutes.",
+                )}
+                "
               </blockquote>
               <figcaption className="mt-5 text-sm font-bold text-white/68">
                 {quote.author} · Visited Apr 2026
@@ -447,15 +547,16 @@ function FeaturedPackages() {
     queryFn: async () => (await api.packages()).map(mapPkg),
   });
 
-  if (isLoading) return (
-    <section className="section-shell py-24 md:py-30">
-      <div className="grid grid-cols-1 gap-7 md:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-[420px] rounded-2xl bg-gray-100 animate-pulse" />
-        ))}
-      </div>
-    </section>
-  );
+  if (isLoading)
+    return (
+      <section className="section-shell py-24 md:py-30">
+        <div className="grid grid-cols-1 gap-7 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-[420px] rounded-2xl bg-gray-100 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
 
   return (
     <section className="section-shell py-24 md:py-30">
@@ -545,37 +646,47 @@ function ServicesSection() {
     queryFn: api.services,
   });
 
-  if (isLoading) return (
-    <section className="bg-[#0e1726] py-24 md:py-32">
-      <div className="section-shell grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-          <div key={i} className="h-48 rounded-2xl bg-white/10 animate-pulse" />
-        ))}
-      </div>
-    </section>
-  );
+  if (isLoading)
+    return (
+      <section className="bg-[#0e1726] py-24 md:py-32">
+        <div className="section-shell grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="h-48 rounded-2xl bg-white/10 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
 
   const featured = allServices.slice(0, 8);
   return (
     <section className="bg-[#0e1726] py-24 text-background md:py-32">
       <div className="section-shell grid grid-cols-1 gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
         <div className="lg:sticky lg:top-28">
-          <span className="eyebrow mb-4 text-[#d7aa73]">{c("services_section", "eyebrow", "What we orchestrate")}</span>
+          <span className="eyebrow mb-4 text-[#d7aa73]">
+            {c("services_section", "eyebrow", "What we orchestrate")}
+          </span>
           <h2 className="display-title mb-8 text-4xl text-white md:text-6xl">
             {c("services_section", "title", "Beyond the itinerary.")}
           </h2>
           <p className="mb-8 max-w-md text-lg leading-9 text-background/70">
-            {c("services_section", "description", "We do not just book flights. We orchestrate transitions between worlds: visas, jets, private chefs, and the moments in between.")}
+            {c(
+              "services_section",
+              "description",
+              "We do not just book flights. We orchestrate transitions between worlds: visas, jets, private chefs, and the moments in between.",
+            )}
           </p>
           <div className="mb-8 grid gap-3 text-sm text-background/76">
             <span className="inline-flex items-center gap-2">
-              <ShieldCheck className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_1", "Emergency desk in every itinerary")}
+              <ShieldCheck className="size-4 text-[#d7aa73]" />{" "}
+              {c("services_section", "bullet_1", "Emergency desk in every itinerary")}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Globe2 className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_2", "Local specialists across 124 destinations")}
+              <Globe2 className="size-4 text-[#d7aa73]" />{" "}
+              {c("services_section", "bullet_2", "Local specialists across 124 destinations")}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Clock3 className="size-4 text-[#d7aa73]" /> {c("services_section", "bullet_3", "Real-time trip changes handled quietly")}
+              <Clock3 className="size-4 text-[#d7aa73]" />{" "}
+              {c("services_section", "bullet_3", "Real-time trip changes handled quietly")}
             </span>
           </div>
           <Link
@@ -674,7 +785,8 @@ function DestinationStrip() {
                 <div>
                   <p className="mb-1 text-base leading-7 text-muted-foreground">{d.tagline}</p>
                   <p className="text-sm font-bold text-[#8a6144]">
-                    {d.duration} · from ${(d.price ?? 0).toLocaleString()} · {(d.rating ?? 4.8).toFixed(1)} rating
+                    {d.duration} · from ${(d.price ?? 0).toLocaleString()} ·{" "}
+                    {(d.rating ?? 4.8).toFixed(1)} rating
                   </p>
                 </div>
                 <ArrowUpRight className="mt-1 size-5 shrink-0 text-accent transition-transform group-hover:translate-x-1" />
@@ -828,10 +940,24 @@ function MomentCollector() {
 
 function ReviewBoard() {
   const { c } = useContent("home");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [selectedPackageSlug, setSelectedPackageSlug] = useState("");
   const { data: reviews = [] } = useQuery({
     queryKey: ["reviews"],
     queryFn: api.getAllReviews,
   });
+  const { data: packages = [] } = useQuery({
+    queryKey: ["packages"],
+    queryFn: api.packages,
+  });
+  const selectedPackage =
+    packages.find((pkg) => pkg.slug === selectedPackageSlug) ?? packages[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedPackageSlug && packages.length > 0) {
+      setSelectedPackageSlug(packages[0].slug);
+    }
+  }, [packages, selectedPackageSlug]);
 
   return (
     <section className="bg-[linear-gradient(180deg,#f6f1ea,#eee6dc)] py-24 md:py-32">
@@ -839,9 +965,15 @@ function ReviewBoard() {
         <div className="mb-14 flex flex-col items-start justify-between gap-6 lg:flex-row">
           <div className="max-w-3xl">
             <span className="eyebrow mb-4">{c("review_board", "eyebrow", "Traveler Board")}</span>
-            <h2 className="display-title mb-5 text-4xl md:text-6xl">{c("review_board", "title", "Review, share, and inspire.")}</h2>
+            <h2 className="display-title mb-5 text-4xl md:text-6xl">
+              {c("review_board", "title", "Review, share, and inspire.")}
+            </h2>
             <p className="body-copy text-lg">
-              {c("review_board", "body", "Real travelers leave ratings, tips, photos and video notes for every destination, package and service. It's a living guide that helps future journeys feel instantly familiar.")}
+              {c(
+                "review_board",
+                "body",
+                "Real travelers leave ratings, tips, photos and video notes for every destination, package and service. It's a living guide that helps future journeys feel instantly familiar.",
+              )}
             </p>
           </div>
           <Link
@@ -855,81 +987,139 @@ function ReviewBoard() {
           <div className="grid gap-6">
             {reviews.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border py-12 text-center">
-                <p className="text-muted-foreground text-sm">No reviews yet. Be the first to share your experience.</p>
+                <p className="text-muted-foreground text-sm">
+                  No reviews yet. Be the first to share your experience.
+                </p>
               </div>
-            ) : reviews.slice(0, 3).map((review) => (
-              <article key={review.public_id} className="premium-card overflow-hidden rounded-2xl">
-                {review.media_urls?.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 p-4 md:p-5">
-                    {review.media_urls.slice(0, 3).map((url, index) => (
-                      <div
-                        key={url}
-                        className={`group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-white/20 ${
-                          index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/3]"
-                        }`}
-                      >
-                        <img
-                          src={url.startsWith("/") ? `http://localhost:8000${url}` : url}
-                          alt={review.title ?? "Review photo"}
-                          loading="lazy"
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                        <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Camera className="size-3 text-white" />
+            ) : (
+              reviews.slice(0, 3).map((review) => (
+                <article
+                  key={review.public_id}
+                  className="premium-card overflow-hidden rounded-2xl"
+                >
+                  {review.media_urls?.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 p-4 md:p-5">
+                      {review.media_urls.slice(0, 3).map((url, index) => {
+                        const src = resolveReviewMediaUrl(url);
+                        return (
+                          <div
+                            key={url}
+                            className={`group relative cursor-pointer overflow-hidden rounded-xl border border-border bg-white/20 ${
+                              index === 0 ? "col-span-2 aspect-[16/9]" : "aspect-[4/3]"
+                            }`}
+                          >
+                            {isVideoMedia(src) ? (
+                              <video
+                                src={src}
+                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                            ) : (
+                              <img
+                                src={src}
+                                alt={review.title ?? "Review photo"}
+                                loading="lazy"
+                                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                            <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Camera className="size-3 text-white" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="p-6 pt-2 md:p-8 md:pt-3">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="grid size-11 place-items-center rounded-full bg-[#0e1726] text-sm font-black text-white">
+                          {(review.customer_name ?? "T")[0]}
+                        </div>
+                        <div>
+                          <div className="font-extrabold">{review.customer_name ?? "Traveler"}</div>
+                          {review.trip_date && (
+                            <div className="text-sm text-muted-foreground">
+                              Traveled {review.trip_date}
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-                <div className="p-6 pt-2 md:p-8 md:pt-3">
-                  <div className="mb-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="grid size-11 place-items-center rounded-full bg-[#0e1726] text-sm font-black text-white">
-                        {(review.customer_name ?? "T")[0]}
-                      </div>
-                      <div>
-                        <div className="font-extrabold">{review.customer_name ?? "Traveler"}</div>
-                        {review.trip_date && (
-                          <div className="text-sm text-muted-foreground">
-                            Traveled {review.trip_date}
-                          </div>
-                        )}
-                      </div>
+                      <span className="inline-flex items-center gap-2 font-extrabold text-[#9a6b45]">
+                        <Star className="size-4 fill-[#d7aa73] text-[#d7aa73]" />
+                        {review.rating.toFixed(1)}
+                      </span>
                     </div>
-                    <span className="inline-flex items-center gap-2 font-extrabold text-[#9a6b45]">
-                      <Star className="size-4 fill-[#d7aa73] text-[#d7aa73]" />
-                      {review.rating.toFixed(1)}
-                    </span>
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      {review.package_title && (
+                        <span className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-foreground/70">
+                          {review.package_title}
+                        </span>
+                      )}
+                    </div>
+                    {review.title && (
+                      <h3 className="mb-3 text-2xl font-black text-foreground">{review.title}</h3>
+                    )}
+                    <p className="mb-5 text-lg leading-9 text-muted-foreground">"{review.body}"</p>
                   </div>
-                  {review.title && (
-                    <h3 className="mb-3 text-2xl font-black text-foreground">{review.title}</h3>
-                  )}
-                  <p className="mb-5 text-lg leading-9 text-muted-foreground">"{review.body}"</p>
-                </div>
-              </article>
-            ))}
+                </article>
+              ))
+            )}
           </div>
           <div className="space-y-6">
             <div className="rounded-2xl border border-border bg-[#0e1726] p-8 text-white shadow-[var(--shadow-soft)]">
               <h3 className="mb-4 text-3xl font-black leading-tight">
-                Add the moment someone else builds a trip around.
+                Add a review to the right package.
               </h3>
               <p className="mb-8 text-base leading-8 text-white/70">
-                Our community reviews let future travelers feel the vibe before they book. Upload a
-                quick photo, recommend a street-food stop, or share the exact moment that made the
-                trip.
+                Choose the package you travelled with, then write your review. Photos and videos are
+                optional and will appear on that package page after submission.
               </p>
               <div className="space-y-3">
-                <button className="w-full rounded-full bg-accent px-6 py-4 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5">
-                  Add a review
+                <label className="block">
+                  <span className="mb-2 block text-xs font-black uppercase tracking-widest text-white/56">
+                    Package
+                  </span>
+                  <select
+                    value={selectedPackageSlug}
+                    onChange={(e) => setSelectedPackageSlug(e.target.value)}
+                    className="w-full rounded-2xl border border-white/16 bg-white/10 px-4 py-3 text-sm font-bold text-white outline-none focus:border-[#d7aa73]"
+                  >
+                    {packages.map((pkg) => (
+                      <option key={pkg.slug} value={pkg.slug} className="text-foreground">
+                        {pkg.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  disabled={!selectedPackage}
+                  onClick={() => setReviewOpen(true)}
+                  className="w-full rounded-full bg-accent px-6 py-4 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Write review for selected package
                 </button>
-                <button className="w-full rounded-full border border-white/16 bg-white/5 px-6 py-4 text-sm font-bold text-white transition-all hover:border-[#d7aa73]">
-                  Upload photos/videos
+                <button
+                  type="button"
+                  disabled={!selectedPackage}
+                  onClick={() => setReviewOpen(true)}
+                  className="w-full rounded-full border border-white/16 bg-white/5 px-6 py-4 text-sm font-bold text-white transition-all hover:border-[#d7aa73] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add photos/videos with review
                 </button>
-                <button className="w-full rounded-full border border-white/16 bg-white/5 px-6 py-4 text-sm font-bold text-white transition-all hover:border-[#d7aa73]">
-                  Share a local tip
-                </button>
+                {selectedPackage && (
+                  <Link
+                    to="/packages"
+                    hash={`reviews-${selectedPackage.slug}`}
+                    className="flex w-full justify-center rounded-full border border-white/16 bg-white/5 px-6 py-4 text-sm font-bold text-white transition-all hover:border-[#d7aa73]"
+                  >
+                    View package reviews
+                  </Link>
+                )}
               </div>
             </div>
             <div className="grid gap-4">
@@ -955,6 +1145,14 @@ function ReviewBoard() {
           </div>
         </div>
       </div>
+      {selectedPackage && (
+        <ReviewForm
+          packageSlug={selectedPackage.slug}
+          packageTitle={selectedPackage.title}
+          open={reviewOpen}
+          onClose={() => setReviewOpen(false)}
+        />
+      )}
     </section>
   );
 }
@@ -966,15 +1164,16 @@ function Testimonials() {
     queryFn: api.testimonials,
   });
 
-  if (isLoading) return (
-    <section className="section-shell py-24 md:py-32">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
-        ))}
-      </div>
-    </section>
-  );
+  if (isLoading)
+    return (
+      <section className="section-shell py-24 md:py-32">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
 
   return (
     <section className="section-shell py-24 md:py-32">
@@ -1035,21 +1234,26 @@ function FaqSection() {
     queryFn: api.faqs,
   });
 
-  if (isLoading) return (
-    <section className="section-shell py-24 md:py-32">
-      <div className="mx-auto max-w-4xl space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
-        ))}
-      </div>
-    </section>
-  );
+  if (isLoading)
+    return (
+      <section className="section-shell py-24 md:py-32">
+        <div className="mx-auto max-w-4xl space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-16 rounded-2xl bg-gray-100 animate-pulse" />
+          ))}
+        </div>
+      </section>
+    );
 
   return (
     <section className="section-shell py-24 md:py-32">
       <div className="mx-auto max-w-4xl">
-        <span className="eyebrow mb-4 text-center">{c("faq_section", "eyebrow", "Frequently Asked")}</span>
-        <h2 className="display-title mb-12 text-center text-4xl md:text-6xl">{c("faq_section", "title", "Quietly answered.")}</h2>
+        <span className="eyebrow mb-4 text-center">
+          {c("faq_section", "eyebrow", "Frequently Asked")}
+        </span>
+        <h2 className="display-title mb-12 text-center text-4xl md:text-6xl">
+          {c("faq_section", "title", "Quietly answered.")}
+        </h2>
         <div className="overflow-hidden rounded-2xl border border-border bg-white/42 shadow-[var(--shadow-soft)]">
           {faqs.map((f, i) => (
             <div key={f.id} className="border-b border-border last:border-b-0">
@@ -1096,13 +1300,19 @@ function NewsletterCTA() {
       </video>
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,23,38,0.86),rgba(14,23,38,0.42)_52%,rgba(14,23,38,0.74)),linear-gradient(180deg,rgba(14,23,38,0.18),rgba(14,23,38,0.84))]" />
       <div className="relative mx-auto flex min-h-[54vh] max-w-6xl flex-col justify-end">
-        <span className="eyebrow mb-5 text-[#d7aa73]">{c("newsletter_cta", "eyebrow", "Your first memory")}</span>
+        <span className="eyebrow mb-5 text-[#d7aa73]">
+          {c("newsletter_cta", "eyebrow", "Your first memory")}
+        </span>
         <h2 className="display-title mb-8 max-w-4xl text-5xl md:text-7xl">
           {c("newsletter_cta", "title", "Describe the moments you want to remember forever.")}
         </h2>
         <div className="grid gap-8 md:grid-cols-[0.95fr_1.05fr] md:items-end">
           <p className="max-w-xl text-lg leading-9 text-white/76">
-            {c("newsletter_cta", "body", "Tell us the feeling, the people, the pace, or the image in your head. We will turn it into a journey that has room for surprise and still runs beautifully.")}
+            {c(
+              "newsletter_cta",
+              "body",
+              "Tell us the feeling, the people, the pace, or the image in your head. We will turn it into a journey that has room for surprise and still runs beautifully.",
+            )}
           </p>
           <form
             onSubmit={(e) => e.preventDefault()}
@@ -1111,7 +1321,11 @@ function NewsletterCTA() {
             <input
               type="text"
               required
-              placeholder={c("newsletter_cta", "placeholder", "Misty mountains, slow dinners, private trains...")}
+              placeholder={c(
+                "newsletter_cta",
+                "placeholder",
+                "Misty mountains, slow dinners, private trains...",
+              )}
               className="min-h-14 rounded-xl border border-white/12 bg-black/20 px-5 text-base text-white outline-none placeholder:text-white/46 focus:border-accent"
             />
             <button

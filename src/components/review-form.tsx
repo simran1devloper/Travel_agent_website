@@ -21,16 +21,22 @@ export function ReviewForm({ packageSlug, packageTitle, open, onClose }: Props) 
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
 
   const mutation = useMutation({
-    mutationFn: () => api.submitReview(packageSlug, {
-      rating,
-      title: title.trim() || undefined,
-      body,
-      trip_date: tripDate || undefined,
-      media_urls: mediaUrls,
-    }),
+    mutationFn: () =>
+      api.submitReview(packageSlug, {
+        rating,
+        title: title.trim() || undefined,
+        body,
+        trip_date: tripDate || undefined,
+        media_urls: mediaUrls,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["reviews"] });
       qc.invalidateQueries({ queryKey: ["reviews", packageSlug] });
+      qc.invalidateQueries({ queryKey: ["review-stats", packageSlug] });
+      qc.invalidateQueries({ queryKey: ["packages"] });
+      qc.invalidateQueries({ queryKey: ["admin-packages"] });
+      qc.invalidateQueries({ queryKey: ["admin-reviews"] });
     },
   });
 
@@ -152,8 +158,7 @@ export function ReviewForm({ packageSlug, packageTitle, open, onClose }: Props) 
             {/* Review title */}
             <div>
               <label className="mb-2 block text-sm font-bold" htmlFor="review-title">
-                Review title{" "}
-                <span className="font-normal text-muted-foreground">(optional)</span>
+                Review title <span className="font-normal text-muted-foreground">(optional)</span>
               </label>
               <input
                 id="review-title"

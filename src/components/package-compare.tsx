@@ -7,7 +7,9 @@ export function PackageCompareDrawer() {
   const { slugs, clear, toggle } = useCompareList();
   const pkgsQuery = useQuery({ queryKey: ["packages"], queryFn: api.packages });
   const all: ApiPackage[] = pkgsQuery.data ?? [];
-  const selected = slugs.map((s) => all.find((p) => p.slug === s)).filter((p): p is ApiPackage => Boolean(p));
+  const selected = slugs
+    .map((s) => all.find((p) => p.slug === s))
+    .filter((p): p is ApiPackage => Boolean(p));
 
   // Close on Escape
   useEffect(() => {

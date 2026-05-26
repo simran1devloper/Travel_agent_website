@@ -6,11 +6,13 @@ import os
 # Resolve the default DB path relative to this file so the server can be
 # launched from any working directory without creating a ghost database.
 _DEFAULT_DB = str(Path(__file__).parent.parent / "data" / "journeymakers.sqlite3")
+_DEFAULT_UPLOAD_DIR = str(Path(__file__).parent.parent / "uploads")
 
 
 class Settings(BaseModel):
     app_name: str = "JourneyMakers API"
     database_path: Path = Path(os.getenv("JOURNEYMAKERS_DB", _DEFAULT_DB))
+    upload_dir: Path = Path(os.getenv("JOURNEYMAKERS_UPLOAD_DIR", _DEFAULT_UPLOAD_DIR))
     admin_token: str = os.getenv("JOURNEYMAKERS_ADMIN_TOKEN", "dev-admin-token")
     customer_token: str = os.getenv("JOURNEYMAKERS_CUSTOMER_TOKEN", "dev-customer-token")
     auth0_domain: str = os.getenv("AUTH0_DOMAIN", "")

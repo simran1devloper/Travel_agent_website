@@ -19,6 +19,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .adapters.inbound.routers import (
     auth,
@@ -75,6 +76,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
     application = FastAPI(title=settings.app_name, lifespan=lifespan)
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    application.mount("/uploads", StaticFiles(directory=str(settings.upload_dir)), name="uploads")
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     application.add_middleware(

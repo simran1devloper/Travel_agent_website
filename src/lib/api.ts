@@ -5,10 +5,14 @@ const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? "dev-admin-token";
 // Warn in console if dev tokens are being used in production
 if (import.meta.env.PROD) {
   if (CUSTOMER_TOKEN === "dev-customer-token") {
-    console.error("[JourneyMakers] SECURITY WARNING: VITE_CUSTOMER_TOKEN is using the default dev value in production build.");
+    console.error(
+      "[JourneyMakers] SECURITY WARNING: VITE_CUSTOMER_TOKEN is using the default dev value in production build.",
+    );
   }
   if (!import.meta.env.VITE_ADMIN_TOKEN) {
-    console.error("[JourneyMakers] SECURITY WARNING: VITE_ADMIN_TOKEN is not set in production build.");
+    console.error(
+      "[JourneyMakers] SECURITY WARNING: VITE_ADMIN_TOKEN is not set in production build.",
+    );
   }
 }
 
@@ -45,7 +49,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
     try {
-      const body = await response.json() as { detail?: string | { msg: string; loc?: string[] }[] };
+      const body = (await response.json()) as {
+        detail?: string | { msg: string; loc?: string[] }[];
+      };
       if (typeof body.detail === "string") {
         detail = body.detail;
       } else if (Array.isArray(body.detail)) {
@@ -58,7 +64,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
           .join("; ");
       }
     } catch {
-      const text = await response.clone().text().catch(() => "");
+      const text = await response
+        .clone()
+        .text()
+        .catch(() => "");
       if (text) detail = text;
     }
     throw new Error(detail);
@@ -392,6 +401,14 @@ export type SiteStatPayload = {
   sort_order?: number;
 };
 
+export type AdminImportResult = {
+  imported: number;
+  updated?: number;
+  skipped?: number;
+  errors: { row: number; message: string }[];
+  conflicts?: { row: number; id?: string; message: string }[];
+};
+
 export type ReviewPayload = {
   rating: number;
   title?: string;
@@ -542,9 +559,11 @@ export const api = {
 
   // Reviews
   getPackageReviews: (slug: string) => request<ApiReview[]>(`/packages/${slug}/reviews`),
-  getPackageReviewStats: (slug: string) => request<ApiReviewStats>(`/packages/${slug}/reviews/stats`),
+  getPackageReviewStats: (slug: string) =>
+    request<ApiReviewStats>(`/packages/${slug}/reviews/stats`),
   getAllReviews: () => request<ApiReview[]>("/reviews"),
-  markReviewHelpful: (publicId: string) => request<{ helpful_count: number }>(`/reviews/${publicId}/helpful`, { method: "POST" }),
+  markReviewHelpful: (publicId: string) =>
+    request<{ helpful_count: number }>(`/reviews/${publicId}/helpful`, { method: "POST" }),
   submitReview: (slug: string, payload: ReviewPayload) =>
     request<{ id: string; status: string }>(`/packages/${slug}/reviews`, {
       method: "POST",
@@ -560,11 +579,31 @@ export const api = {
   // Offers
   offers: () => request<ApiOffer[]>("/offers"),
   adminOffers: () => request<ApiOffer[]>("/admin/offers", { admin: true }),
-  adminCreateOffer: (payload: OfferPayload) => request<ApiOffer>("/admin/offers", { method: "POST", admin: true, body: JSON.stringify(payload) }),
-  adminUpdateOffer: (id: number, payload: Partial<OfferPayload>) => request<ApiOffer>(`/admin/offers/${id}`, { method: "PATCH", admin: true, body: JSON.stringify(payload) }),
-  adminDeleteOffer: (id: number) => request<{ deleted: number }>(`/admin/offers/${id}`, { method: "DELETE", admin: true }),
-  adminReplyToReview: (publicId: string, reply: string) => request<{ id: string; admin_reply: string }>(`/admin/reviews/${publicId}/reply`, { method: "POST", admin: true, body: JSON.stringify({ reply }) }),
-  adminVerifyReview: (publicId: string) => request<{ id: string; verified: boolean }>(`/admin/reviews/${publicId}/verify`, { method: "PATCH", admin: true }),
+  adminCreateOffer: (payload: OfferPayload) =>
+    request<ApiOffer>("/admin/offers", {
+      method: "POST",
+      admin: true,
+      body: JSON.stringify(payload),
+    }),
+  adminUpdateOffer: (id: number, payload: Partial<OfferPayload>) =>
+    request<ApiOffer>(`/admin/offers/${id}`, {
+      method: "PATCH",
+      admin: true,
+      body: JSON.stringify(payload),
+    }),
+  adminDeleteOffer: (id: number) =>
+    request<{ deleted: number }>(`/admin/offers/${id}`, { method: "DELETE", admin: true }),
+  adminReplyToReview: (publicId: string, reply: string) =>
+    request<{ id: string; admin_reply: string }>(`/admin/reviews/${publicId}/reply`, {
+      method: "POST",
+      admin: true,
+      body: JSON.stringify({ reply }),
+    }),
+  adminVerifyReview: (publicId: string) =>
+    request<{ id: string; verified: boolean }>(`/admin/reviews/${publicId}/verify`, {
+      method: "PATCH",
+      admin: true,
+    }),
   recordOfferUse: (id: number) => request<void>(`/offers/${id}/use`, { method: "POST" }),
 
   // Memories
@@ -730,10 +769,14 @@ export const api = {
 
   /** Upload a CSV file and import rows for the given entity type.
    *  Returns { imported, errors } where errors is a list of { row, message } objects. */
-  adminImportCsv: (kind: string, file: File): Promise<{ imported: number; errors: { row: number; message: string }[] }> => {
+  adminImportCsv: (
+    kind: string,
+    file: File,
+    conflict: "skip" | "update" = "skip",
+  ): Promise<AdminImportResult> => {
     const form = new FormData();
     form.append("file", file);
-    return request(`/admin/import/${kind}`, {
+    return request(`/admin/import/${kind}?conflict=${conflict}`, {
       method: "POST",
       admin: true,
       body: form,
@@ -742,7 +785,16 @@ export const api = {
 
   // Content CMS
   content: (page: string) => request<ContentPage>(`/content/${page}`),
-  adminContent: () => request<Record<string, Record<string, Record<string, { value: string; label: string; value_type: string; sort_order: number }>>>>("/admin/content", { admin: true }),
+  adminContent: () =>
+    request<
+      Record<
+        string,
+        Record<
+          string,
+          Record<string, { value: string; label: string; value_type: string; sort_order: number }>
+        >
+      >
+    >("/admin/content", { admin: true }),
   adminUpdateContent: (updates: ContentUpdate[]) =>
     request<{ updated: number }>("/admin/content", {
       method: "PATCH",
@@ -775,7 +827,10 @@ export const api = {
     });
   },
 
-  updateInquiry: (publicId: string, payload: { status?: string; assigned_planner_id?: number | null }) =>
+  updateInquiry: (
+    publicId: string,
+    payload: { status?: string; assigned_planner_id?: number | null },
+  ) =>
     request<{ id: string; status: string }>(`/admin/inquiries/${publicId}`, {
       method: "PATCH",
       admin: true,

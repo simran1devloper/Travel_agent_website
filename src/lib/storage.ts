@@ -11,6 +11,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 
+const STORAGE_SYNC_EVENT = "jm-storage-sync";
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -43,11 +45,14 @@ function isClient(): boolean {
 
 type UseStorageFn = <T>(
   key: string,
-  defaultValue: T
+  defaultValue: T,
 ) => [T, (val: T | ((prev: T) => T)) => void, () => void];
 
 function makeUseStorage(getStorage: () => Storage): UseStorageFn {
-  return function useStorage<T>(key: string, defaultValue: T): [T, (val: T | ((prev: T) => T)) => void, () => void] {
+  return function useStorage<T>(
+    key: string,
+    defaultValue: T,
+  ): [T, (val: T | ((prev: T) => T)) => void, () => void] {
     const [value, setValueState] = useState<T>(() => {
       if (!isClient()) return defaultValue;
       return safeRead(getStorage(), key, defaultValue);
@@ -61,23 +66,29 @@ function makeUseStorage(getStorage: () => Storage): UseStorageFn {
     useEffect(() => {
       if (!isClient()) return;
       setValueState(safeRead(getStorage(), key, defaultRef.current));
-    }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [key]);
 
     // Listen for changes from other tabs / windows (localStorage only)
     useEffect(() => {
       if (!isClient()) return;
       const handler = (e: StorageEvent) => {
         if (e.key === key && e.storageArea === getStorage()) {
-          setValueState(
-            e.newValue !== null
-              ? (JSON.parse(e.newValue) as T)
-              : defaultRef.current
-          );
+          setValueState(e.newValue !== null ? (JSON.parse(e.newValue) as T) : defaultRef.current);
+        }
+      };
+      const sameTabHandler = (e: Event) => {
+        const detail = (e as CustomEvent<{ key: string }>).detail;
+        if (detail?.key === key) {
+          setValueState(safeRead(getStorage(), key, defaultRef.current));
         }
       };
       window.addEventListener("storage", handler);
-      return () => window.removeEventListener("storage", handler);
-    }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+      window.addEventListener(STORAGE_SYNC_EVENT, sameTabHandler);
+      return () => {
+        window.removeEventListener("storage", handler);
+        window.removeEventListener(STORAGE_SYNC_EVENT, sameTabHandler);
+      };
+    }, [key]);
 
     const setValue = useCallback(
       (valOrUpdater: T | ((prev: T) => T)) => {
@@ -87,18 +98,26 @@ function makeUseStorage(getStorage: () => Storage): UseStorageFn {
               ? (valOrUpdater as (prev: T) => T)(prev)
               : valOrUpdater;
           if (isClient()) safeWrite(getStorage(), key, next);
+          if (isClient()) {
+            window.dispatchEvent(new CustomEvent(STORAGE_SYNC_EVENT, { detail: { key } }));
+          }
           return next;
         });
       },
-      [key] // eslint-disable-line react-hooks/exhaustive-deps
+      [key],
     );
 
     const remove = useCallback(() => {
       if (isClient()) {
-        try { getStorage().removeItem(key); } catch { /* ignore */ }
+        try {
+          getStorage().removeItem(key);
+        } catch {
+          /* ignore */
+        }
+        window.dispatchEvent(new CustomEvent(STORAGE_SYNC_EVENT, { detail: { key } }));
       }
       setValueState(defaultRef.current);
-    }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [key]);
 
     return [value, setValue, remove];
   };
@@ -126,7 +145,11 @@ export const ls = {
   },
   remove(key: string): void {
     if (!isClient()) return;
-    try { localStorage.removeItem(key); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
   },
 };
 
@@ -141,6 +164,10 @@ export const ss = {
   },
   remove(key: string): void {
     if (!isClient()) return;
-    try { sessionStorage.removeItem(key); } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
   },
 };

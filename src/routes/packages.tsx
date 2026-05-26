@@ -5,6 +5,8 @@ import {
   ArrowUpRight,
   CalendarDays,
   Camera,
+  ChevronLeft,
+  ChevronRight,
   Heart,
   MapPin,
   MessageCircle,
@@ -12,17 +14,31 @@ import {
   Sparkles,
   Star,
   Users,
+  X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { MEDIA } from "@/config/media";
-import { api, type ApiPackage, type ApiGalleryItem, type ApiReview, type ApiReviewStats } from "@/lib/api";
+import {
+  API_BASE_URL,
+  api,
+  type ApiPackage,
+  type ApiGalleryItem,
+  type ApiReview,
+  type ApiReviewStats,
+} from "@/lib/api";
 import { ReviewForm } from "@/components/review-form";
 import { StarRating } from "@/components/star-rating";
-import { useRecentlyViewed, useGuestWishlist, useHelpfulVotes, usePackageFilterState, useCompareList } from "@/lib/user-prefs";
+import {
+  useRecentlyViewed,
+  useGuestWishlist,
+  useHelpfulVotes,
+  usePackageFilterState,
+  useCompareList,
+} from "@/lib/user-prefs";
 import { useContent } from "@/lib/use-content";
 import { PackageCompareDrawer } from "@/components/package-compare";
 
@@ -51,6 +67,15 @@ export const Route = createFileRoute("/packages")({
 
 type GalleryItem = ApiGalleryItem;
 
+type ReviewMoment = GalleryItem & {
+  reviewId?: string;
+  reviewTitle?: string;
+  reviewBody?: string;
+  reviewer?: string;
+  rating?: number;
+  tripDate?: string;
+};
+
 type PackageItem = {
   slug: string;
   title: string;
@@ -67,11 +92,56 @@ type PackageItem = {
 
 function galleryFallback(slug: string): GalleryItem[] {
   return [
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-01/600/800`, caption: "Featured moment", author: "JourneyMakers traveler" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-02/800/600`, caption: "Local scene", author: "Verified traveler" },
-    { type: "video", src: `https://picsum.photos/seed/${slug}-reel/600/400`, caption: "Journey highlights", author: "Community moment" },
-    { type: "photo", src: `https://picsum.photos/seed/${slug}-04/600/800`, caption: "Hidden gems", author: "JourneyMakers guide" },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-01/600/800`,
+      caption: "Featured moment",
+      author: "JourneyMakers traveler",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-02/800/600`,
+      caption: "Local scene",
+      author: "Verified traveler",
+    },
+    {
+      type: "video",
+      src: `https://picsum.photos/seed/${slug}-reel/600/400`,
+      caption: "Journey highlights",
+      author: "Community moment",
+    },
+    {
+      type: "photo",
+      src: `https://picsum.photos/seed/${slug}-04/600/800`,
+      caption: "Hidden gems",
+      author: "JourneyMakers guide",
+    },
   ];
+}
+
+function resolveReviewMediaUrl(url: string) {
+  return url.startsWith("/") ? `${API_BASE_URL}${url}` : url;
+}
+
+function isVideoMoment(src: string) {
+  return /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(src);
+}
+
+function getReviewMoments(reviews: ApiReview[]): ReviewMoment[] {
+  return reviews.flatMap((review) =>
+    (review.media_urls ?? []).map((url, index) => ({
+      type: isVideoMoment(url) ? "video" : "photo",
+      src: resolveReviewMediaUrl(url),
+      caption: review.title || `Traveler moment ${index + 1}`,
+      author: review.customer_name ?? "Verified traveler",
+      reviewId: review.public_id,
+      reviewTitle: review.title,
+      reviewBody: review.body,
+      reviewer: review.customer_name ?? "Traveler",
+      rating: review.rating,
+      tripDate: review.trip_date,
+    })),
+  );
 }
 
 function mapApiPackage(pkg: ApiPackage): PackageItem {
@@ -82,14 +152,16 @@ function mapApiPackage(pkg: ApiPackage): PackageItem {
     days: pkg.days,
     price: pkg.price,
     category: pkg.category ?? "Journey",
-    image: MEDIA.destinations?.[pkg.slug] ?? pkg.image_url ?? `https://picsum.photos/seed/${pkg.slug}/800/600`,
+    image:
+      MEDIA.destinations?.[pkg.slug] ??
+      pkg.image_url ??
+      `https://picsum.photos/seed/${pkg.slug}/800/600`,
     tagline: pkg.tagline,
     description: pkg.description,
     rating: pkg.rating ?? 4.8,
     reviewCount: pkg.review_count,
   };
 }
-
 
 type JourneyPlace = {
   name: string;
@@ -172,7 +244,6 @@ function PackagesPage() {
         <RecentlyViewedStrip />
         <FeaturedJourneys />
         <QuietQuote />
-        <CuratedMemory />
         <PlannerCta />
         <MobileStickyCta />
       </main>
@@ -200,11 +271,7 @@ function RecentlyViewedStrip() {
               href={`/packages#${pkg.slug}`}
               className="group flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-secondary/40 px-4 py-2.5 hover:border-foreground/30 hover:bg-secondary transition-colors"
             >
-              <img
-                src={pkg.image}
-                alt={pkg.title}
-                className="size-10 rounded-xl object-cover"
-              />
+              <img src={pkg.image} alt={pkg.title} className="size-10 rounded-xl object-cover" />
               <div>
                 <p className="text-sm font-bold leading-tight line-clamp-1">{pkg.title}</p>
                 <p className="text-xs text-muted-foreground">
@@ -354,17 +421,18 @@ function FeaturedJourneys() {
     setSelectedDurationLabel("");
   }
 
-  if (isLoading) return (
-    <section id="journeys" className="bg-[#f7f2ea] py-20 md:py-28">
-      <div className="section-shell">
-        <div className="mt-12 grid gap-8">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-[520px] rounded-2xl bg-black/5 animate-pulse" />
-          ))}
+  if (isLoading)
+    return (
+      <section id="journeys" className="bg-[#f7f2ea] py-20 md:py-28">
+        <div className="section-shell">
+          <div className="mt-12 grid gap-8">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-[520px] rounded-2xl bg-black/5 animate-pulse" />
+            ))}
+          </div>
         </div>
-      </div>
-    </section>
-  );
+      </section>
+    );
 
   return (
     <section id="journeys" className="bg-[#f7f2ea] py-20 md:py-28">
@@ -372,7 +440,11 @@ function FeaturedJourneys() {
         <SectionIntro
           eyebrow={c("featured_section", "eyebrow", "Featured journeys")}
           title={c("featured_section", "title", "Four ways to begin.")}
-          copy={c("featured_section", "body", "A smaller, more deliberate set of journeys keeps the page calm and makes comparison easier.")}
+          copy={c(
+            "featured_section",
+            "body",
+            "A smaller, more deliberate set of journeys keeps the page calm and makes comparison easier.",
+          )}
         />
 
         {/* Filter UI */}
@@ -390,12 +462,16 @@ function FeaturedJourneys() {
 
           {/* Budget chips */}
           <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">Budget</span>
+            <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">
+              Budget
+            </span>
             {BUDGET_FILTERS.map((b) => (
               <button
                 key={b.label}
                 type="button"
-                onClick={() => setSelectedBudgetLabel(selectedBudgetLabel === b.label ? "" : b.label)}
+                onClick={() =>
+                  setSelectedBudgetLabel(selectedBudgetLabel === b.label ? "" : b.label)
+                }
                 className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-all ${
                   selectedBudgetLabel === b.label
                     ? "border-[#c76b2f] bg-[#c76b2f] text-white"
@@ -409,7 +485,9 @@ function FeaturedJourneys() {
 
           {/* Duration chips */}
           <div className="flex flex-wrap gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">Duration</span>
+            <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">
+              Duration
+            </span>
             {DURATION_FILTERS.map((d) => (
               <button
                 key={d.label}
@@ -437,7 +515,9 @@ function FeaturedJourneys() {
           {/* Category / mood chips */}
           {categories.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">Category</span>
+              <span className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground self-center mr-1">
+                Category
+              </span>
               {categories.map((cat) => (
                 <button
                   key={cat}
@@ -475,7 +555,11 @@ function FeaturedJourneys() {
             </div>
           ) : (
             filteredPackages.map((packageItem, index) => (
-              <DestinationStoryCard key={packageItem.slug} index={index} packageItem={packageItem} />
+              <DestinationStoryCard
+                key={packageItem.slug}
+                index={index}
+                packageItem={packageItem}
+              />
             ))
           )}
         </div>
@@ -498,11 +582,21 @@ function FeaturedJourneys() {
 
 function DestinationStoryCard({ packageItem, index }: { packageItem: PackageItem; index: number }) {
   const places = getPlacesForPackage(packageItem);
-  const moments = places.flatMap((place) =>
+  const fallbackMoments = places.flatMap((place) =>
     getPlaceGallery(place, packageItem)
       .slice(0, 2)
       .map((item) => ({ item, place })),
   );
+  const { data: reviews = [] } = useQuery({
+    queryKey: ["reviews", packageItem.slug],
+    queryFn: () => api.getPackageReviews(packageItem.slug),
+  });
+  const reviewMoments = getReviewMoments(reviews);
+  const moments =
+    reviewMoments.length > 0
+      ? reviewMoments.map((item) => ({ item, place: places[0] }))
+      : fallbackMoments;
+  const [activeMoment, setActiveMoment] = useState<number | null>(null);
   const topMoments = places.flatMap((place) => place.topMoments).slice(0, 3);
 
   // Track recently viewed packages in localStorage
@@ -558,16 +652,27 @@ function DestinationStoryCard({ packageItem, index }: { packageItem: PackageItem
             </span>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            {moments.slice(0, 3).map(({ item, place }) => (
+            {moments.slice(0, 3).map(({ item, place }, momentIndex) => (
               <ExperienceMomentCard
-                key={`${packageItem.slug}-${place.name}-${item.caption}`}
+                key={`${packageItem.slug}-${place.name}-${item.caption}-${item.src}`}
                 item={item}
                 placeName={place.name}
+                onOpen={() => setActiveMoment(momentIndex)}
               />
             ))}
           </div>
         </div>
       </div>
+
+      {activeMoment !== null && (
+        <ReviewMomentsModal
+          moments={moments.map(({ item }) => item)}
+          activeIndex={activeMoment}
+          onChange={setActiveMoment}
+          onClose={() => setActiveMoment(null)}
+          packageTitle={packageItem.title}
+        />
+      )}
 
       <div className="px-5 pb-8 md:px-8">
         <PackageReviewsSection slug={packageItem.slug} title={packageItem.title} />
@@ -635,7 +740,8 @@ function JourneyDetailPanel({
           }}
           className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#171717] px-5 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5 hover:bg-accent focus-ring"
         >
-          {saved ? "Saved ✓" : saving ? "Saving..." : "Save moment"} <Heart className={`size-4 ${saved ? "fill-current" : ""}`} />
+          {saved ? "Saved ✓" : saving ? "Saving..." : "Save moment"}{" "}
+          <Heart className={`size-4 ${saved ? "fill-current" : ""}`} />
         </button>
         <Link
           to="/booking"
@@ -653,7 +759,11 @@ function JourneyDetailPanel({
               : "border-black/12 text-foreground hover:bg-[#f7f2ea]"
           }`}
         >
-          {inCompare(packageItem.slug) ? "✓ Added to compare" : isFull ? "Compare full (max 3)" : "Compare"}
+          {inCompare(packageItem.slug)
+            ? "✓ Added to compare"
+            : isFull
+              ? "Compare full (max 3)"
+              : "Compare"}
         </button>
       </div>
     </div>
@@ -675,15 +785,37 @@ function SimpleMeta({
   );
 }
 
-function ExperienceMomentCard({ item, placeName }: { item: GalleryItem; placeName: string }) {
+function ExperienceMomentCard({
+  item,
+  placeName,
+  onOpen,
+}: {
+  item: GalleryItem;
+  placeName: string;
+  onOpen?: () => void;
+}) {
   return (
-    <article className="group overflow-hidden rounded-xl bg-[#171717]">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group overflow-hidden rounded-xl bg-[#171717] text-left focus-ring"
+    >
       <div className="relative aspect-[4/5] overflow-hidden">
-        <img
-          src={item.src}
-          alt={item.caption}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
+        {item.type === "video" || isVideoMoment(item.src) ? (
+          <video
+            src={item.src}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img
+            src={item.src}
+            alt={item.caption}
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/76 via-black/8 to-transparent" />
         <div className="absolute left-3 top-3 rounded-full bg-black/44 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
           <Camera className="mr-1 inline size-3" />
@@ -694,7 +826,133 @@ function ExperienceMomentCard({ item, placeName }: { item: GalleryItem; placeNam
           <p className="mt-2 text-xs font-semibold text-white/68">{placeName}</p>
         </div>
       </div>
-    </article>
+    </button>
+  );
+}
+
+function ReviewMomentsModal({
+  moments,
+  activeIndex,
+  onChange,
+  onClose,
+  packageTitle,
+}: {
+  moments: ReviewMoment[];
+  activeIndex: number;
+  onChange: (index: number) => void;
+  onClose: () => void;
+  packageTitle: string;
+}) {
+  const active = moments[activeIndex];
+  if (!active) return null;
+
+  const hasMany = moments.length > 1;
+  const goPrev = () => onChange((activeIndex - 1 + moments.length) % moments.length);
+  const goNext = () => onChange((activeIndex + 1) % moments.length);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/78 p-3 backdrop-blur-md sm:p-6">
+      <div className="mx-auto flex h-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-background shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+              Customer moments
+            </p>
+            <h3 className="truncate text-base font-black">{packageTitle}</h3>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-secondary">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_340px]">
+          <div className="relative flex min-h-[360px] items-center justify-center bg-[#0f0f0f]">
+            {active.type === "video" || isVideoMoment(active.src) ? (
+              <video
+                src={active.src}
+                className="max-h-full max-w-full object-contain"
+                controls
+                autoPlay
+              />
+            ) : (
+              <img
+                src={active.src}
+                alt={active.caption}
+                className="max-h-full max-w-full object-contain"
+              />
+            )}
+
+            {hasMany && (
+              <>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  className="absolute left-3 top-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-md hover:bg-black/70"
+                >
+                  <ChevronLeft className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  className="absolute right-3 top-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-md hover:bg-black/70"
+                >
+                  <ChevronRight className="size-5" />
+                </button>
+              </>
+            )}
+          </div>
+
+          <aside className="min-h-0 overflow-y-auto border-t border-border bg-background lg:border-l lg:border-t-0">
+            <div className="p-5">
+              <div className="flex items-center gap-2">
+                {active.rating && <StarRating value={active.rating} readonly size="sm" />}
+                {active.tripDate && (
+                  <span className="text-[10px] font-mono text-muted-foreground">
+                    {active.tripDate}
+                  </span>
+                )}
+              </div>
+              <p className="mt-3 text-sm font-black">{active.reviewTitle || active.caption}</p>
+              {active.reviewBody && (
+                <p className="mt-2 text-sm leading-7 text-muted-foreground">{active.reviewBody}</p>
+              )}
+              <p className="mt-4 text-xs font-bold text-foreground/70">
+                - {active.reviewer ?? active.author}
+              </p>
+            </div>
+
+            {hasMany && (
+              <div className="grid grid-cols-4 gap-2 border-t border-border p-4 lg:grid-cols-3">
+                {moments.map((moment, index) => (
+                  <button
+                    type="button"
+                    key={`${moment.src}-${index}`}
+                    onClick={() => onChange(index)}
+                    className={`aspect-square overflow-hidden rounded-lg border ${activeIndex === index ? "border-accent" : "border-transparent"}`}
+                  >
+                    {moment.type === "video" || isVideoMoment(moment.src) ? (
+                      <video
+                        src={moment.src}
+                        className="h-full w-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <img
+                        src={moment.src}
+                        alt={moment.caption}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -705,7 +963,13 @@ function QuietQuote() {
       <div className="section-shell">
         <div className="mx-auto max-w-4xl text-center">
           <p className="text-3xl font-black leading-tight md:text-5xl">
-            "{c("quiet_quote", "text", "Luxury is not more information. It is the confidence to show only what matters.")}"
+            "
+            {c(
+              "quiet_quote",
+              "text",
+              "Luxury is not more information. It is the confidence to show only what matters.",
+            )}
+            "
           </p>
           <p className="mt-6 text-sm font-bold uppercase text-muted-foreground">
             {c("quiet_quote", "author", "JourneyMakers design principle")}
@@ -724,13 +988,14 @@ function CuratedMemory() {
 
   const packageItem = allPackages[4] ?? allPackages[0];
 
-  if (!packageItem) return (
-    <section className="bg-[#0b1018] py-20 text-white md:py-28">
-      <div className="section-shell">
-        <div className="h-[520px] rounded-2xl bg-white/5 animate-pulse" />
-      </div>
-    </section>
-  );
+  if (!packageItem)
+    return (
+      <section className="bg-[#0b1018] py-20 text-white md:py-28">
+        <div className="section-shell">
+          <div className="h-[520px] rounded-2xl bg-white/5 animate-pulse" />
+        </div>
+      </section>
+    );
 
   const places = getPlacesForPackage(packageItem);
   const place = places[0];
@@ -875,6 +1140,8 @@ function getPlacesForPackage(packageItem: PackageItem) {
 
 function PackageReviewsSection({ slug, title }: { slug: string; title: string }) {
   const [showForm, setShowForm] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const queryClient = useQueryClient();
   // Votes now persist in localStorage so users can't re-vote after refresh
   const { hasVoted, markVoted } = useHelpfulVotes();
 
@@ -889,16 +1156,55 @@ function PackageReviewsSection({ slug, title }: { slug: string; title: string })
 
   const helpfulMut = useMutation({
     mutationFn: (publicId: string) => api.markReviewHelpful(publicId),
-    onSuccess: (_, publicId) => {
+    onMutate: async (publicId) => {
+      await queryClient.cancelQueries({ queryKey: ["reviews", slug] });
+      const previousReviews = queryClient.getQueryData<ApiReview[]>(["reviews", slug]);
+
+      queryClient.setQueryData<ApiReview[]>(["reviews", slug], (current) =>
+        current?.map((review) =>
+          review.public_id === publicId
+            ? { ...review, helpful_count: (review.helpful_count ?? 0) + 1 }
+            : review,
+        ),
+      );
+
+      return { previousReviews };
+    },
+    onError: (_error, _publicId, context) => {
+      queryClient.setQueryData(["reviews", slug], context?.previousReviews);
+    },
+    onSuccess: (result, publicId) => {
       markVoted(publicId);
+      queryClient.setQueryData<ApiReview[]>(["reviews", slug], (current) =>
+        current?.map((review) =>
+          review.public_id === publicId
+            ? { ...review, helpful_count: result.helpful_count }
+            : review,
+        ),
+      );
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["reviews", slug] });
     },
   });
 
   const reviews = reviewsQuery.data ?? [];
   const stats = statsQuery.data as ApiReviewStats | undefined;
+  const sortedReviews = [...reviews].sort((a, b) => {
+    if (b.rating !== a.rating) return b.rating - a.rating;
+    if ((b.helpful_count ?? 0) !== (a.helpful_count ?? 0)) {
+      return (b.helpful_count ?? 0) - (a.helpful_count ?? 0);
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+  const topReview = sortedReviews[0];
+  const reviewHasHelpfulVote = (review: ApiReview) =>
+    hasVoted(review.public_id) && (review.helpful_count ?? 0) > 0;
+  const reviewIsVoting = (review: ApiReview) =>
+    helpfulMut.isPending && helpfulMut.variables === review.public_id;
 
   return (
-    <div className="mt-10 border-t border-border pt-8">
+    <div id={`reviews-${slug}`} className="mt-10 border-t border-border pt-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-bold tracking-tighter">Traveler Reviews</h3>
@@ -908,12 +1214,23 @@ function PackageReviewsSection({ slug, title }: { slug: string; title: string })
             </p>
           )}
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:bg-accent transition-colors"
-        >
-          Write a review
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {reviews.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setShowAllReviews(true)}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-2.5 text-sm font-bold hover:bg-secondary transition-colors"
+            >
+              View all reviews
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:bg-accent transition-colors"
+          >
+            Write a review
+          </button>
+        </div>
       </div>
 
       {/* Star breakdown */}
@@ -953,67 +1270,96 @@ function PackageReviewsSection({ slug, title }: { slug: string; title: string })
           <p className="text-sm">No reviews yet. Be the first to share your experience.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {reviews.map((review) => (
-            <div key={review.public_id} className="rounded-2xl border border-border p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm">{review.customer_name ?? "Traveler"}</span>
-                    {review.verified && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[10px] font-bold">
-                        ✓ Verified traveler
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <StarRating value={review.rating} readonly size="sm" />
-                    {review.trip_date && (
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        Traveled {review.trip_date}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                  {new Date(review.created_at).toLocaleDateString()}
-                </span>
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-bold text-muted-foreground">Top customer review</p>
+            {reviews.length > 1 && (
+              <span className="text-xs font-semibold text-muted-foreground">
+                Showing 1 of {reviews.length}
+              </span>
+            )}
+          </div>
+          {topReview && (
+            <ReviewCard
+              review={topReview}
+              hasVoted={reviewHasHelpfulVote(topReview)}
+              isVoting={reviewIsVoting(topReview)}
+              onHelpful={() => helpfulMut.mutate(topReview.public_id)}
+            />
+          )}
+        </div>
+      )}
+
+      {reviews.length > 1 && (
+        <div className="mt-5 text-center">
+          <button
+            type="button"
+            onClick={() => setShowAllReviews(true)}
+            className="inline-flex min-h-11 items-center justify-center rounded-full border border-border px-6 text-sm font-bold hover:bg-secondary"
+          >
+            View all {reviews.length} reviews
+          </button>
+        </div>
+      )}
+
+      {showAllReviews && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            aria-label="Close reviews"
+            className="absolute inset-0 bg-[#11131c]/72"
+            onClick={() => setShowAllReviews(false)}
+          />
+          <aside className="absolute right-0 top-0 flex h-full w-full max-w-[820px] flex-col bg-background shadow-2xl sm:w-[58vw]">
+            <div className="flex items-center justify-between border-b border-border px-5 py-5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black uppercase tracking-wide">{title}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {stats?.average ?? 0} ★ · {reviews.length} review{reviews.length !== 1 ? "s" : ""}
+                </p>
               </div>
-              {review.title && (
-                <p className="mt-3 font-bold text-sm">{review.title}</p>
-              )}
-              <p className="mt-2 text-sm text-muted-foreground leading-7">{review.body}</p>
-              {review.media_urls?.length > 0 && (
-                <div className="mt-3 flex gap-2 overflow-x-auto">
-                  {review.media_urls.map((url) => (
-                    <img
-                      key={url}
-                      src={url.startsWith("/") ? `http://localhost:8000${url}` : url}
-                      alt="Review"
-                      className="h-16 w-16 flex-shrink-0 rounded-lg object-cover"
-                    />
-                  ))}
-                </div>
-              )}
-              {/* Admin reply */}
-              {review.admin_reply && (
-                <div className="mt-3 rounded-xl bg-secondary/60 border border-border/50 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1">Response from JourneyMakers</p>
-                  <p className="text-sm text-muted-foreground">{review.admin_reply}</p>
-                </div>
-              )}
-              {/* Helpful */}
-              <div className="mt-3 flex items-center gap-3 pt-3 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setShowAllReviews(false)}
+                className="rounded-full p-2 hover:bg-secondary"
+                aria-label="Close reviews"
+              >
+                <X className="size-6" />
+              </button>
+            </div>
+
+            {stats && stats.total > 0 && (
+              <div className="border-b border-border px-5 py-4">
+                <ReviewStatsDashboard stats={stats} compact />
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="mb-4 flex items-center justify-between">
+                <p className="text-sm font-bold text-muted-foreground">All customer reviews</p>
                 <button
-                  onClick={() => !hasVoted(review.public_id) && helpfulMut.mutate(review.public_id)}
-                  disabled={hasVoted(review.public_id)}
-                  className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 flex items-center gap-1"
+                  type="button"
+                  onClick={() => setShowAllReviews(false)}
+                  className="text-sm font-bold text-accent hover:underline"
                 >
-                  👍 Helpful ({review.helpful_count ?? 0})
+                  View less
                 </button>
               </div>
+              <div className="divide-y divide-border">
+                {sortedReviews.map((review) => (
+                  <div key={review.public_id} className="py-5 first:pt-0">
+                    <ReviewCard
+                      review={review}
+                      hasVoted={reviewHasHelpfulVote(review)}
+                      isVoting={reviewIsVoting(review)}
+                      onHelpful={() => helpfulMut.mutate(review.public_id)}
+                      flush
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          </aside>
         </div>
       )}
 
@@ -1025,6 +1371,133 @@ function PackageReviewsSection({ slug, title }: { slug: string; title: string })
       />
     </div>
   );
+}
+
+function ReviewStatsDashboard({
+  stats,
+  compact = false,
+}: {
+  stats: ApiReviewStats;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border border-border p-5 flex gap-6 items-center ${compact ? "bg-secondary/20" : ""}`}
+    >
+      <div className="text-center shrink-0">
+        <div className={`${compact ? "text-4xl" : "text-5xl"} font-black tracking-tighter`}>
+          {stats.average}
+        </div>
+        <StarRating value={Math.round(stats.average)} readonly size="sm" />
+        <div className="text-xs text-muted-foreground mt-1">{stats.total} reviews</div>
+      </div>
+      <div className="flex-1 space-y-1.5">
+        {[5, 4, 3, 2, 1].map((star) => {
+          const breakdown = stats.breakdown as Record<number, number>;
+          const count = breakdown[star] ?? 0;
+          const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+          return (
+            <div key={star} className="flex items-center gap-2 text-xs">
+              <span className="w-4 text-right text-muted-foreground">{star}</span>
+              <span className="text-amber-400">★</span>
+              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-accent transition-all"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="w-8 text-right text-muted-foreground">{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ReviewCard({
+  review,
+  hasVoted,
+  isVoting = false,
+  onHelpful,
+  flush = false,
+}: {
+  review: ApiReview;
+  hasVoted: boolean;
+  isVoting?: boolean;
+  onHelpful: () => void;
+  flush?: boolean;
+}) {
+  return (
+    <div className={flush ? "" : "rounded-2xl border border-border p-5"}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm">{review.customer_name ?? "Traveler"}</span>
+            {Boolean(review.verified) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-[10px] font-bold">
+                ✓ Verified traveler
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="rounded-full bg-emerald-600 px-2 py-1 text-xs font-black text-white">
+              {review.rating.toFixed(1)} ★
+            </span>
+            {review.trip_date && (
+              <span className="text-[10px] text-muted-foreground font-mono">
+                Traveled {review.trip_date}
+              </span>
+            )}
+          </div>
+        </div>
+        <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+          {new Date(review.created_at).toLocaleDateString()}
+        </span>
+      </div>
+      {review.title && <p className="mt-3 font-bold text-sm">{review.title}</p>}
+      <p className="mt-2 text-sm text-muted-foreground leading-7">{review.body}</p>
+      {review.media_urls?.length > 0 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto">
+          {review.media_urls.map((url) => (
+            <ReviewMediaThumb key={url} url={url} />
+          ))}
+        </div>
+      )}
+      {review.admin_reply && (
+        <div className="mt-3 rounded-xl bg-secondary/60 border border-border/50 px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-1">
+            Response from JourneyMakers
+          </p>
+          <p className="text-sm text-muted-foreground">{review.admin_reply}</p>
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-3 pt-3 border-t border-border/50">
+        <button
+          type="button"
+          onClick={() => !hasVoted && !isVoting && onHelpful()}
+          disabled={hasVoted || isVoting}
+          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          👍 {isVoting ? "Saving..." : "Helpful"} ({review.helpful_count ?? 0})
+        </button>
+      </div>
+    </div>
+  );
+}
+function ReviewMediaThumb({ url }: { url: string }) {
+  const src = resolveReviewMediaUrl(url);
+  if (isVideoMoment(src)) {
+    return (
+      <video
+        src={src}
+        className="h-20 w-20 flex-shrink-0 rounded-lg object-cover"
+        controls
+        preload="metadata"
+      />
+    );
+  }
+  return <img src={src} alt="Review" className="h-20 w-20 flex-shrink-0 rounded-lg object-cover" />;
 }
 
 function getPlaceGallery(place: JourneyPlace, packageItem: PackageItem): GalleryItem[] {
