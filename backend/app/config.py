@@ -3,6 +3,10 @@ from pathlib import Path
 from pydantic import BaseModel
 import os
 
+# Load backend/.env automatically (no-op if file is missing)
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 # Resolve the default DB path relative to this file so the server can be
 # launched from any working directory without creating a ghost database.
 _DEFAULT_DB = str(Path(__file__).parent.parent / "data" / "journeymakers.sqlite3")
@@ -24,7 +28,7 @@ class Settings(BaseModel):
         origin.strip()
         for origin in os.getenv(
             "JOURNEYMAKERS_CORS_ORIGINS",
-            "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
+            "http://localhost:8080,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000",
         ).split(",")
         if origin.strip()
     ]
@@ -42,7 +46,9 @@ class Settings(BaseModel):
 
     @property
     def auth0_enabled(self) -> bool:
-        return bool(self.auth0_domain and self.auth0_audience)
+        # Audience is optional — required only when a backend API is registered in Auth0.
+        # Without it Auth0 issues opaque tokens; with it, Auth0 issues verifiable JWTs.
+        return bool(self.auth0_domain)
 
 
 @lru_cache
