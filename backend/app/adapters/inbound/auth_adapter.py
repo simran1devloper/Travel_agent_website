@@ -74,18 +74,32 @@ def _decode_auth0_token(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Auth0 is not configured on the API",
         )
+    # Opaque tokens (issued when no Auth0 API audience is registered) are NOT JWTs.
+    # They cannot be decoded — detect early and return a helpful error.
+    if len(credentials.credentials.split(".")) != 3:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                "Received an opaque Auth0 token. "
+                "Register an API in Auth0 (Applications → APIs), "
+                "then set AUTH0_AUDIENCE on the server and VITE_AUTH0_AUDIENCE on the frontend."
+            ),
+        )
     try:
         signing_key = _get_jwks_client().get_signing_key_from_jwt(
             credentials.credentials
         )
-        return jwt.decode(
-            credentials.credentials,
-            signing_key.key,
-            algorithms=settings.auth0_algorithms,
-            audience=settings.auth0_audience,
-            issuer=settings.auth0_issuer,
-            leeway=10,
-        )
+        # When no audience is configured, skip aud claim verification.
+        decode_kwargs: dict[str, Any] = {
+            "algorithms": settings.auth0_algorithms,
+            "issuer": settings.auth0_issuer,
+            "leeway": 10,
+        }
+        if settings.auth0_audience:
+            decode_kwargs["audience"] = settings.auth0_audience
+        else:
+            decode_kwargs["options"] = {"verify_aud": False}
+        return jwt.decode(credentials.credentials, signing_key.key, **decode_kwargs)
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

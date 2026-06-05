@@ -50,10 +50,9 @@ export function AppAuthProvider({ children }: { children: React.ReactNode }) {
       domain={AUTH0_DOMAIN}
       clientId={AUTH0_CLIENT_ID}
       authorizationParams={{
-        audience: AUTH0_AUDIENCE,
+        ...(AUTH0_AUDIENCE ? { audience: AUTH0_AUDIENCE } : {}),
         scope: AUTH0_SCOPE,
         redirect_uri: window.location.origin,
-        connection: "google-oauth2",
       }}
       onRedirectCallback={(appState) => {
         navigate({ to: appState?.returnTo ?? "/dashboard" });

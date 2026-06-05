@@ -5,7 +5,8 @@ export const AUTH0_SCOPE =
   import.meta.env.VITE_AUTH0_SCOPE ??
   "openid profile email read:dashboard manage:admin manage:packages manage:destinations";
 
-export const AUTH0_ENABLED = Boolean(AUTH0_DOMAIN && AUTH0_CLIENT_ID && AUTH0_AUDIENCE);
+// Audience is optional — only needed if you have a backend API registered in Auth0
+export const AUTH0_ENABLED = Boolean(AUTH0_DOMAIN && AUTH0_CLIENT_ID);
 
 /** Returns true only when Auth0 explicitly says the API audience isn't registered.
  *  "unauthorized_client" is intentionally excluded — it covers many unrelated errors
