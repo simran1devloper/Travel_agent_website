@@ -495,6 +495,13 @@ def _seed(conn: sqlite3.Connection) -> None:
             ("footer", "contact", "whatsapp", "15551234567", "text", "WhatsApp number (digits only)", 2),
             ("footer", "contact", "address", "", "text", "Office address", 3),
 
+            ("footer", "contact_card", "company_name", "JourneyMakers", "text", "Company name", 0),
+            ("footer", "contact_card", "agent_name", "Sonia Mehra", "text", "Agent name", 1),
+            ("footer", "contact_card", "agent_role", "Senior Travel Expert", "text", "Agent role", 2),
+            ("footer", "contact_card", "phone", "+1 (555) 123-4567", "text", "Display phone", 3),
+            ("footer", "contact_card", "whatsapp", "15551234567", "text", "WhatsApp number (digits only)", 4),
+            ("footer", "contact_card", "location", "JourneyMakers Travel Desk, New York, USA", "text", "Company location", 5),
+
             ("footer", "social", "instagram_url", "", "url", "Instagram URL", 0),
             ("footer", "social", "linkedin_url", "", "url", "LinkedIn URL", 1),
             ("footer", "social", "twitter_url", "", "url", "Twitter/X URL", 2),

@@ -12,6 +12,8 @@ import {
   Calendar,
   Wallet,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Play,
   Camera,
   BadgeCheck,
@@ -20,12 +22,19 @@ import {
   ShieldCheck,
   Star,
   Bookmark,
-  Sparkles,
-  Quote,
   Zap,
   Tag,
   Gift,
   Clock,
+  X,
+  Award,
+  Headphones,
+  ThumbsUp,
+  Info,
+  Map,
+  MessageCircle,
+  ReceiptText,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -44,6 +53,8 @@ import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { ReviewForm } from "@/components/review-form";
+import { WhatsAppOutlineIcon } from "@/components/whatsapp-icon";
+import { ContactInfoCard } from "@/components/contact-info-card";
 
 // ── Shape mappers ─────────────────────────────────────────────────────────────
 
@@ -181,9 +192,8 @@ function HomePage() {
       <SiteNav />
       <main className="relative">
         <Hero />
-        <StatsStrip />
+        <HomeAboutSection />
         <OffersStrip />
-        <CinematicMoment />
         <FeaturedPackages />
         <ServicesSection />
         <DestinationStrip />
@@ -201,68 +211,479 @@ function HomePage() {
 
 function Hero() {
   const { c } = useContent("home");
+  const [contactMessage, setContactMessage] = useState<string | null>(null);
+  const openContactCard = (message: string) => setContactMessage(message);
+
   return (
-    <section className="relative flex min-h-[94vh] w-full flex-col justify-end overflow-hidden p-6 md:p-16">
+    <section className="relative w-full overflow-hidden bg-[#080b0f] text-white">
       <video
         autoPlay
         muted
         loop
         playsInline
         poster={MEDIA.heroPoster}
-        className="absolute inset-0 -z-10 w-full h-full object-cover"
+        className="absolute inset-0 h-full w-full object-cover"
       >
         <source src={MEDIA.heroVideo} type="video/mp4" />
       </video>
-      <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(0,0,0,0.74),rgba(0,0,0,0.42)_52%,rgba(0,0,0,0.16)),linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.7))]" />
-      <div className="absolute inset-x-0 bottom-0 -z-10 h-44 bg-gradient-to-t from-[#0e1726]/70 to-transparent" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,10,0.9)_0%,rgba(5,7,10,0.68)_38%,rgba(5,7,10,0.38)_67%,rgba(5,7,10,0.72)_100%),linear-gradient(180deg,rgba(5,7,10,0.04)_0%,rgba(5,7,10,0.48)_66%,rgba(5,7,10,0.9)_100%)]" />
+      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/20 to-transparent" />
 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, ease: [0.32, 0.72, 0, 1] }}
-        className="relative w-full max-w-7xl"
+        className="relative mx-auto flex min-h-[calc(100svh-72px)] w-full max-w-none flex-col justify-center gap-5 px-4 py-6 sm:px-6 lg:min-h-[calc(100svh-76px)] lg:justify-start lg:px-10 lg:pb-44 lg:pt-10 xl:px-12"
       >
-        <div className="max-w-5xl">
-          <span className="mb-5 inline-flex rounded-full border border-white/18 bg-black/20 px-4 py-2 text-xs font-bold uppercase tracking-normal text-white/78 backdrop-blur-xl">
-            {c("hero", "badge", "Traveler-led luxury planning")}
-          </span>
-          <p className="mb-4 max-w-2xl text-base font-semibold uppercase tracking-normal text-white/76">
-            {c(
-              "hero",
-              "tagline",
-              "Discover places through the moments travelers never stopped talking about.",
-            )}
-          </p>
-          <h1 className="mb-8 max-w-5xl text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_6px_34px_rgba(0,0,0,0.35)] md:text-7xl lg:text-8xl">
-            {c("hero", "title", "Build your journey from living memories.")}
-          </h1>
-          <p className="mb-10 max-w-2xl text-base leading-8 text-white/86 md:text-lg">
-            {c(
-              "hero",
-              "subtitle",
-              "Save cinematic traveler moments, feel the mood of every stop, then turn your collection into a private itinerary with concierge support.",
-            )}
-          </p>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(420px,0.8fr)_minmax(360px,0.62fr)_minmax(330px,0.55fr)] xl:grid-cols-[minmax(510px,0.85fr)_minmax(420px,0.68fr)_minmax(380px,0.6fr)] 2xl:grid-cols-[560px_500px_460px]">
+          <div className="max-w-[660px] pt-4 lg:pt-14">
+            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/18 bg-black/28 px-4 py-2 text-xs font-extrabold uppercase tracking-normal text-white/88 shadow-[0_18px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+              <Star className="size-3.5 fill-[#e88535] text-[#e88535]" />
+              {c("hero", "badge", "Traveler-led luxury planning")}
+            </span>
+            <p className="mb-4 max-w-2xl text-sm font-extrabold uppercase leading-6 tracking-normal text-white/72 md:text-base">
+              {c(
+                "hero",
+                "tagline",
+                "Discover places through the moments travelers never stopped talking about.",
+              )}
+            </p>
+            <h1 className="mb-6 max-w-[650px] text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_16px_38px_rgba(0,0,0,0.5)] sm:text-6xl md:text-7xl lg:text-[4.7rem] xl:text-[5.05rem]">
+              Build your journey from <span className="text-[#ef7d2a]">living memories</span>
+            </h1>
+            <p className="mb-6 max-w-2xl text-base leading-8 text-white/78 md:text-lg">
+              {c(
+                "hero",
+                "subtitle",
+                "Save cinematic traveler moments, feel the mood of every stop, then turn your collection into a private itinerary with concierge support.",
+              )}
+            </p>
 
-          <div className="mb-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <Link
-              to="/booking"
-              className="inline-flex min-h-14 items-center justify-center rounded-full bg-accent px-9 text-sm font-extrabold text-white shadow-[0_18px_50px_rgba(199,107,47,0.32)] transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_70px_rgba(199,107,47,0.42)] focus-ring"
-            >
-              {c("hero", "cta_primary", "Start Collecting")}
-            </Link>
-            <Link
-              to="/packages"
-              className="inline-flex min-h-14 items-center justify-center rounded-full border border-white/32 bg-white/8 px-9 text-sm font-bold text-white backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/14 focus-ring"
-            >
-              {c("hero", "cta_secondary", "View Journeys")}
-            </Link>
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+              <Link
+                to="/booking"
+                className="inline-flex min-h-14 items-center justify-center rounded-full bg-[#e66f1f] px-9 text-sm font-extrabold text-white shadow-[0_18px_50px_rgba(230,111,31,0.36)] transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_24px_70px_rgba(230,111,31,0.46)] focus-ring"
+              >
+                {c("hero", "cta_primary", "Start Collecting")}
+              </Link>
+              <Link
+                to="/packages"
+                className="inline-flex min-h-14 items-center justify-center rounded-full border border-white/30 bg-white/6 px-9 text-sm font-bold text-white backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/12 focus-ring"
+              >
+                {c("hero", "cta_secondary", "View Journeys")}
+              </Link>
+            </div>
           </div>
 
+          <HeroDealCard onContact={openContactCard} />
+
+          <div className="grid gap-4 lg:mt-8 lg:max-w-[430px] lg:justify-self-end 2xl:max-w-[460px]">
+            <HeroTestimonialCard onContact={openContactCard} />
+            <HeroExitCard onContact={openContactCard} />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 lg:absolute lg:bottom-6 lg:left-10 xl:left-12">
           <SearchBar />
+          <HeroTrustStrip />
         </div>
       </motion.div>
+      <ContactInfoCard
+        open={contactMessage !== null}
+        onClose={() => setContactMessage(null)}
+        message={contactMessage ?? undefined}
+      />
     </section>
+  );
+}
+
+const aboutStats = [
+  {
+    icon: Award,
+    value: "10+",
+    title: "10+ Years of Travel Experience",
+    description: "Trusted planning for domestic & international journeys",
+  },
+  {
+    icon: Users,
+    value: "5000+",
+    title: "5000+ Happy Travelers",
+    description: "Families, couples, groups, and corporate clients served",
+  },
+  {
+    icon: Star,
+    value: "4.9/5",
+    title: "4.9/5 Traveler Rating",
+    description: "Known for smooth planning and transparent service",
+  },
+  {
+    icon: Headphones,
+    value: "End-to-End",
+    title: "End-to-End Trip Support",
+    description: "Flights, hotels, transfers, sightseeing, and expert help",
+  },
+];
+
+const aboutHighlights = [
+  {
+    icon: Map,
+    title: "Personalized Itineraries",
+    description: "Custom travel plans crafted around your style and comfort.",
+  },
+  {
+    icon: ReceiptText,
+    title: "Transparent Pricing",
+    description: "Clear inclusions, no hidden charges, total peace of mind.",
+  },
+  {
+    icon: MessageCircle,
+    title: "Quick WhatsApp Response",
+    description: "Real people, real support, right when you need it.",
+  },
+];
+
+function HomeAboutSection() {
+  const [contactOpen, setContactOpen] = useState(false);
+
+  return (
+    <section className="bg-[#f7efe5] px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+      <div className="relative mx-auto max-w-[1540px] overflow-hidden rounded-2xl border border-[#d9c8b5]/70 bg-[#fbf6ee] px-5 py-10 shadow-[0_24px_80px_rgba(127,87,48,0.08)] sm:px-8 lg:px-16 lg:py-16">
+        <div className="absolute left-[61%] top-12 hidden items-center gap-2 text-[#df7b37] opacity-70 xl:flex">
+          <svg
+            width="132"
+            height="58"
+            viewBox="0 0 132 58"
+            fill="none"
+            aria-hidden="true"
+            className="h-14 w-32"
+          >
+            <path
+              d="M2 30C18 3 42 24 31 38C20 52 2 17 27 9C53 1 66 31 91 22C107 16 111 9 125 2"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeDasharray="4 6"
+              strokeLinecap="round"
+            />
+          </svg>
+          <Plane className="-ml-2 size-7 rotate-45 fill-current" />
+        </div>
+
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,0.95fr)_minmax(540px,0.88fr)] xl:gap-16">
+          <div className="relative z-10 max-w-[650px]">
+            <span className="mb-5 block text-xs font-extrabold uppercase tracking-[0.34em] text-[#d77232]">
+              About JourneyMakers
+            </span>
+            <h2 className="mb-6 text-4xl font-black leading-[1.12] tracking-normal text-[#17191b] sm:text-5xl lg:text-6xl">
+              We plan journeys that feel personal, smooth, and memorable.
+            </h2>
+            <p className="mb-7 text-base font-semibold leading-8 text-[#636363] sm:text-lg">
+              JourneyMakers helps travelers plan customized trips across India and international
+              destinations. From itinerary planning and hotel bookings to flights, transfers,
+              sightseeing, honeymoon packages, family tours, group travel, and corporate retreats,
+              we handle every detail with care and expert support.
+            </p>
+
+            <div className="mb-7 flex gap-4 rounded-xl border border-[#dcccbc] bg-white/34 p-5 text-sm font-semibold leading-7 text-[#626262] shadow-sm sm:items-center sm:px-6">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full border border-[#f3c7a2] bg-[#fff0e4] text-[#db7835]">
+                <Info className="size-5" />
+              </span>
+              <p>
+                For international trips, we provide basic travel guidance and can connect travelers
+                with trusted third-party visa assistance partners when needed.
+              </p>
+            </div>
+
+            <div className="mb-10 flex flex-col gap-4 sm:flex-row">
+              <Link
+                to="/booking"
+                className="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl bg-[#d86f2d] px-9 text-sm font-extrabold text-white shadow-[0_18px_40px_rgba(216,111,45,0.28)] transition-all hover:-translate-y-0.5 hover:bg-[#e27a35] focus-ring"
+              >
+                Plan My Trip <ArrowUpRight className="size-5" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setContactOpen(true)}
+                className="inline-flex min-h-14 items-center justify-center gap-3 rounded-xl border border-[#ddccba] bg-white/44 px-9 text-sm font-extrabold text-[#181a1c] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#d86f2d] hover:text-[#c96628] focus-ring"
+              >
+                <WhatsAppOutlineIcon className="size-6" /> Chat on WhatsApp
+              </button>
+            </div>
+          </div>
+
+          <div className="relative grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.78fr)] xl:min-h-[610px]">
+            <div className="relative z-10 grid gap-4 sm:grid-cols-2 lg:self-center">
+              {aboutStats.map(({ icon: Icon, value, title, description }) => (
+                <article
+                  key={title}
+                  className="min-h-[220px] rounded-xl border border-[#ddccba] bg-white/42 p-6 shadow-[0_18px_54px_rgba(102,70,38,0.08)] backdrop-blur-sm"
+                >
+                  <div className="mb-6 grid size-16 place-items-center rounded-full bg-[#f7e8d8] text-[#d87433]">
+                    <Icon className={`size-9 ${Icon === Star ? "" : ""}`} />
+                  </div>
+                  <h3 className="mb-3 text-xl font-black leading-7 text-[#16181a]">{title}</h3>
+                  <p className="text-base font-semibold leading-7 text-[#626262]">{description}</p>
+                  <span className="sr-only">{value}</span>
+                </article>
+              ))}
+            </div>
+
+            <div className="relative min-h-[420px] lg:min-h-full">
+              <img
+                src={MEDIA.destinations["bangkok-singapore"]}
+                alt="International city waterfront at sunset"
+                loading="lazy"
+                className="absolute inset-0 h-full w-full rounded-2xl object-cover shadow-[0_26px_70px_rgba(112,75,38,0.16)]"
+                style={{
+                  clipPath: "polygon(18% 0, 100% 0, 100% 100%, 0 92%, 0 18%)",
+                }}
+              />
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-b from-[#f6d0b4]/18 via-transparent to-[#4e2c16]/12" />
+              <div className="absolute -bottom-16 left-1/2 hidden -translate-x-1/2 rounded-full border border-[#df7b37]/35 bg-[#fbf6ee]/90 p-6 text-center text-[#d87433] shadow-[0_18px_44px_rgba(121,75,31,0.12)] backdrop-blur md:block">
+                <div className="relative grid size-28 place-items-center rounded-full border border-dashed border-[#df7b37]/70">
+                  <BriefcaseBusiness className="size-9" />
+                  <span className="absolute inset-0 animate-[spin_18s_linear_infinite] rounded-full text-[10px] font-black uppercase tracking-[0.22em] [writing-mode:horizontal-tb]">
+                    <span className="absolute left-1/2 top-1 -translate-x-1/2">Journeys</span>
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2">
+                      Just for you
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 mt-10 grid overflow-hidden rounded-xl border border-[#ddccba] bg-white/36 shadow-sm md:grid-cols-3 xl:max-w-[1080px]">
+          {aboutHighlights.map(({ icon: Icon, title, description }) => (
+            <article
+              key={title}
+              className="grid min-h-[112px] grid-cols-[3.75rem_minmax(0,1fr)] gap-4 border-b border-[#ddccba] px-5 py-6 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0"
+            >
+              <div className="grid size-14 place-items-center rounded-full bg-[#f7e8d8] text-[#d87433]">
+                <Icon className="size-7" />
+              </div>
+              <div>
+                <h3 className="mb-1 text-base font-black leading-6 text-[#17191b]">{title}</h3>
+                <p className="text-sm font-semibold leading-6 text-[#5f5f5f]">{description}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+      <ContactInfoCard
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        message="Hi JourneyMakers, I'd like help planning my trip."
+      />
+    </section>
+  );
+}
+
+function HeroDealCard({ onContact }: { onContact: (message: string) => void }) {
+  return (
+    <aside className="hidden min-h-[440px] overflow-hidden rounded-2xl border border-[#d49a68]/50 bg-[#0c1014]/88 shadow-[0_30px_90px_rgba(0,0,0,0.48)] backdrop-blur-2xl lg:mt-8 lg:grid lg:grid-cols-[0.9fr_1.1fr] xl:min-h-[500px]">
+      <img
+        src={MEDIA.destinations["bangkok-singapore"]}
+        alt="Dubai beach luxury hotel at sunset"
+        className="h-full min-h-[440px] w-full object-cover xl:min-h-[500px]"
+      />
+      <div className="relative flex min-w-0 flex-col p-5 xl:p-7">
+        <button
+          type="button"
+          aria-label="Close offer"
+          className="absolute right-4 top-4 grid size-8 place-items-center rounded-full text-white/72 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="size-5" />
+        </button>
+        <span className="mb-5 w-fit rounded-full bg-[#a75e2a] px-4 py-2 text-[11px] font-black uppercase text-[#ffe5c7]">
+          Limited time offer
+        </span>
+        <h2 className="mb-3 text-3xl font-black leading-tight text-white xl:text-4xl">
+          Limited Travel Deal
+        </h2>
+        <p className="mb-5 text-sm leading-6 text-white/74 xl:text-base xl:leading-7">
+          Get customized packages for{" "}
+          <span className="font-bold text-white">Dubai, Bali, Thailand, Europe</span> and more
+        </p>
+        <button
+          type="button"
+          onClick={() => onContact("Hi JourneyMakers, I'd like the limited travel offer.")}
+          className="mb-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#df6d22] px-4 text-xs font-extrabold text-white shadow-[0_16px_34px_rgba(223,109,34,0.32)] transition hover:-translate-y-0.5 hover:bg-[#ee792a] focus-ring xl:text-sm"
+        >
+          <WhatsAppOutlineIcon className="size-5" /> Get Offer on WhatsApp
+        </button>
+        <div className="mb-3 border-b border-white/14 pb-3">
+          <p className="max-w-40 text-[11px] font-extrabold leading-5 text-white/58">
+            Trusted by Thousands of Travelers
+          </p>
+        </div>
+        <div className="grid flex-1 grid-cols-2 overflow-hidden border-b border-white/14">
+          <HeroMetric icon={Award} value="10+" label="Years of Experience" />
+          <HeroMetric icon={ThumbsUp} value="5000+" label="Happy Travelers" />
+          <HeroMetric icon={Star} value="4.9/5" label="Average Traveler Rating" />
+          <HeroMetric icon={Headphones} value="24/7" label="Trip Assistance" />
+        </div>
+        <label className="mt-4 flex items-center gap-2 text-xs font-semibold text-white/70">
+          <input
+            type="checkbox"
+            className="size-4 rounded border-white/30 bg-transparent accent-[#df6d22]"
+          />
+          Don't show again today
+        </label>
+      </div>
+    </aside>
+  );
+}
+
+function HeroMetric({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="grid min-h-[92px] grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 border-b border-r border-white/14 px-3 py-3 last:border-r-0 [&:nth-child(2)]:border-r-0 [&:nth-child(n+3)]:border-b-0">
+      <Icon className="size-6 shrink-0 justify-self-center text-[#eda36b]" />
+      <div className="min-w-0 text-center">
+        <div className="whitespace-nowrap text-lg font-black leading-none text-white">{value}</div>
+        <div className="mx-auto mt-1 max-w-[90px] whitespace-normal text-[10px] font-semibold leading-3 text-white/70">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HeroTestimonialCard({ onContact }: { onContact: (message: string) => void }) {
+  const photos = [
+    MEDIA.destinations["tokyo-seoul"],
+    MEDIA.destinations["newyork"],
+    MEDIA.destinations.switzerland,
+  ];
+
+  return (
+    <aside className="hidden rounded-2xl border border-[#d49a68]/45 bg-[#0c1014]/88 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl lg:block">
+      <div className="relative mb-5 text-center">
+        <button
+          type="button"
+          aria-label="Close traveler review"
+          className="absolute right-0 top-0 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="size-5" />
+        </button>
+        <h2 className="font-serif text-2xl font-bold leading-none text-white">
+          What Our Travelers Say
+        </h2>
+        <div className="mx-auto mt-3 h-px w-32 bg-gradient-to-r from-transparent via-[#eda36b] to-transparent" />
+      </div>
+      <div className="relative mb-4 grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          aria-label="Previous review"
+          className="absolute -left-4 top-1/2 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full border border-white/18 bg-black/38 text-white backdrop-blur"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+        {photos.map((photo, index) => (
+          <img
+            key={photo}
+            src={photo}
+            alt={`Traveler review photo ${index + 1}`}
+            className="aspect-[1.05/1] w-full rounded-lg object-cover"
+          />
+        ))}
+        <button
+          type="button"
+          aria-label="Next review"
+          className="absolute -right-4 top-1/2 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full border border-white/18 bg-black/38 text-white backdrop-blur"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      </div>
+      <div className="mb-4 flex justify-center gap-1.5">
+        {[0, 1, 2, 3].map((dot) => (
+          <span
+            key={dot}
+            className={`size-2 rounded-full ${dot === 0 ? "bg-[#df6d22]" : "bg-white/30"}`}
+          />
+        ))}
+      </div>
+      <blockquote className="mx-auto mb-5 max-w-sm text-center text-sm font-semibold italic leading-6 text-white/82">
+        "Our Dubai trip was perfectly planned, hotels, transfers, and sightseeing were smooth."
+      </blockquote>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <div className="flex items-center justify-center gap-1.5 rounded-lg bg-white/8 px-3 py-2 text-xs font-bold text-white/82">
+          <Star className="size-4 fill-[#ffc247] text-[#ffc247]" /> 4.9/5 Traveler Rating
+        </div>
+        <div className="rounded-lg bg-white/8 px-3 py-2 text-center text-xs font-bold text-white/72">
+          Trusted by 5000+ travelers
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => onContact("Hi JourneyMakers, please plan a trip like this.")}
+        className="mb-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#df6d22] px-5 text-sm font-extrabold text-white transition hover:bg-[#ee792a] focus-ring"
+      >
+        <WhatsAppOutlineIcon className="size-5" /> Plan My Trip Like This
+      </button>
+      <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold text-white/68">
+        <span className="flex items-center justify-center gap-1.5">
+          <ShieldCheck className="size-4 text-[#eda36b]" /> 10+ Years of Service
+        </span>
+        <span className="flex items-center justify-center gap-1.5">
+          <Gift className="size-4 text-[#eda36b]" /> Personalized Experiences
+        </span>
+      </div>
+    </aside>
+  );
+}
+
+function HeroExitCard({ onContact }: { onContact: (message: string) => void }) {
+  return (
+    <aside className="hidden rounded-2xl border border-[#d49a68]/45 bg-[#0c1014]/88 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl lg:block">
+      <div className="relative mb-4">
+        <button
+          type="button"
+          aria-label="Close itinerary prompt"
+          className="absolute right-0 top-0 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="size-5" />
+        </button>
+        <h2 className="max-w-[16rem] font-serif text-2xl font-bold leading-tight text-white">
+          Leaving without planning your trip?
+        </h2>
+      </div>
+      <p className="mb-5 max-w-sm text-sm font-medium leading-6 text-white/72">
+        Talk to our travel expert and get a free itinerary suggestion.
+      </p>
+      <div className="mb-5 grid grid-cols-4 overflow-hidden rounded-lg border border-white/16">
+        {[
+          ["10+ Years", "Of Trust", Award],
+          ["5000+", "Happy Travelers", Users],
+          ["4.9/5", "Rated Service", ThumbsUp],
+          ["No Hidden", "Charges", Gift],
+        ].map(([top, bottom, Icon]) => (
+          <div
+            key={`${top}-${bottom}`}
+            className="border-r border-white/16 px-2 py-3 text-center last:border-r-0"
+          >
+            <Icon className="mx-auto mb-1.5 size-5 text-[#eda36b]" />
+            <div className="text-[11px] font-black leading-4 text-[#f1b078]">{top as string}</div>
+            <div className="text-[10px] font-bold leading-3 text-white/64">{bottom as string}</div>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onContact("Hi JourneyMakers, I'd like a free itinerary suggestion.")}
+        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#df6d22] px-5 text-sm font-extrabold text-white transition hover:bg-[#ee792a] focus-ring"
+      >
+        <WhatsAppOutlineIcon className="size-5" /> Get Free Itinerary on WhatsApp
+      </button>
+    </aside>
   );
 }
 
@@ -279,14 +700,14 @@ function SearchBar() {
   }
 
   return (
-    <div className="grid w-full grid-cols-1 gap-2 rounded-2xl border border-white/22 bg-white/12 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.25)] backdrop-blur-2xl md:grid-cols-5">
+    <div className="grid w-full max-w-[760px] grid-cols-1 gap-1 rounded-2xl border border-white/24 bg-[#11171d]/72 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-2xl md:grid-cols-[1fr_1fr_1fr_1fr_1.05fr] xl:max-w-[780px]">
       <FieldGroup icon={MapPin} label="Destination">
         <input
           type="text"
-          placeholder="Where to?"
+          placeholder="Worldwide"
           value={destination}
           onChange={(e) => setDestination(e.target.value)}
-          className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
+          className="w-full bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/76"
         />
       </FieldGroup>
       <FieldGroup icon={Calendar} label="Timeline">
@@ -295,7 +716,7 @@ function SearchBar() {
           placeholder="Pick dates"
           value={dates}
           onChange={(e) => setDates(e.target.value)}
-          className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
+          className="w-full bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/76"
         />
       </FieldGroup>
       <FieldGroup icon={Users} label="Travelers">
@@ -304,22 +725,22 @@ function SearchBar() {
           placeholder="2 adults"
           value={travelers}
           onChange={(e) => setTravelers(e.target.value)}
-          className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
+          className="w-full bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/76"
         />
       </FieldGroup>
       <FieldGroup icon={Wallet} label="Budget">
         <input
           type="text"
-          placeholder="$5k — $12k"
+          placeholder="$5k - $12k"
           value={budget}
           onChange={(e) => setBudget(e.target.value)}
-          className="bg-transparent text-white placeholder:text-white/40 outline-none text-sm font-medium w-full"
+          className="w-full bg-transparent text-sm font-medium text-white outline-none placeholder:text-white/76"
         />
       </FieldGroup>
       <button
         type="button"
         onClick={handlePlanJourney}
-        className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-accent px-6 py-4 font-extrabold text-white transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(199,107,47,0.35)] active:scale-95 focus-ring"
+        className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#e66f1f] px-6 py-4 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_16px_36px_rgba(230,111,31,0.35)] active:scale-95 focus-ring"
       >
         Plan Journey <ArrowUpRight className="size-4" />
       </button>
@@ -337,48 +758,39 @@ function FieldGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col rounded-xl px-4 py-3 transition-colors hover:bg-white/8 md:border-r md:border-white/10 last:border-0">
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-normal text-white/68">
-        <Icon className="size-3.5" /> {label}
+    <div className="flex flex-col rounded-xl px-4 py-3 transition-colors hover:bg-white/8 md:border-r md:border-white/14 last:border-0">
+      <span className="mb-1.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-normal text-white/74">
+        <Icon className="size-4 text-white/72" /> {label}
       </span>
       {children}
     </div>
   );
 }
 
-function StatsStrip() {
-  const { data: stats = [], isLoading } = useQuery({
-    queryKey: ["site-stats"],
-    queryFn: api.siteStats,
-  });
-
-  if (isLoading)
-    return (
-      <section className="border-y border-white/10 bg-[#0e1726] py-10">
-        <div className="section-shell grid grid-cols-2 gap-4 md:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 rounded-2xl bg-white/10 animate-pulse" />
-          ))}
-        </div>
-      </section>
-    );
+function HeroTrustStrip() {
+  const trustItems = [
+    { icon: Award, value: "10+", label: "10+ Years of Trusted Service" },
+    { icon: Users, value: "5000+", label: "Happy Travelers" },
+    { icon: Star, value: "4.9/5", label: "Average Rating" },
+    { icon: Headphones, value: "24/7", label: "Trip Support" },
+    { icon: ShieldCheck, value: "Safe", label: "Secure & Hassle-Free Travel" },
+  ];
 
   return (
-    <section className="border-y border-white/10 bg-[#0e1726] py-10 text-background">
-      <div className="section-shell grid grid-cols-2 gap-4 text-center md:grid-cols-4 md:gap-6">
-        {stats.map((s) => (
-          <div
-            key={s.label}
-            className="rounded-2xl border border-white/10 bg-white/[0.055] px-5 py-7 backdrop-blur-xl"
-          >
-            <div className="mb-3 text-xs font-extrabold uppercase tracking-normal text-[#d7aa73]">
-              {s.label}
-            </div>
-            <div className="text-3xl font-black tracking-normal md:text-4xl">{s.value}</div>
+    <div className="grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-2xl border border-white/24 bg-[#11171d]/72 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:grid-cols-2 lg:grid-cols-5">
+      {trustItems.map(({ icon: Icon, value, label }) => (
+        <div
+          key={label}
+          className="flex min-h-20 items-center gap-3 border-b border-white/14 px-5 py-4 last:border-b-0 sm:border-r sm:last:border-r-0 lg:border-b-0"
+        >
+          <Icon className="size-8 shrink-0 text-[#eda36b]" />
+          <div>
+            <div className="text-lg font-black leading-tight text-white">{value}</div>
+            <div className="text-xs font-bold leading-4 text-white/72">{label}</div>
           </div>
-        ))}
-      </div>
-    </section>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -482,59 +894,6 @@ function OffersStrip() {
           {offers.map((offer) => (
             <OffersStripCard key={offer.id} offer={offer} />
           ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CinematicMoment() {
-  const { c } = useContent("home");
-  const { data: destinations = [] } = useQuery({
-    queryKey: ["destinations"],
-    queryFn: async () => (await api.destinations()).map(mapDest),
-  });
-  const moment = destinations.find((d) => d.slug === "switzerland") ?? destinations[0];
-  const quote = moment?.gallery[0];
-
-  return (
-    <section className="relative min-h-[78vh] overflow-hidden bg-[#0e1726] text-white">
-      <img
-        src={moment?.image ?? MEDIA.heroPoster}
-        alt={moment?.name ?? "JourneyMakers"}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,23,38,0.82),rgba(14,23,38,0.38)_46%,rgba(14,23,38,0.1)),linear-gradient(180deg,rgba(14,23,38,0.12),rgba(14,23,38,0.76))]" />
-      <div className="relative flex min-h-[78vh] items-end px-6 py-16 md:px-12 lg:px-20">
-        <div className="max-w-4xl">
-          <div className="mb-8 inline-flex items-center gap-3 rounded-full border border-white/18 bg-white/10 px-4 py-2 text-sm font-extrabold backdrop-blur-md">
-            <Sparkles className="size-4 text-[#d7aa73]" />{" "}
-            {c("cinematic_moment", "badge", "Cinematic Moment")}
-          </div>
-          <h2 className="mb-8 text-balance text-5xl font-black leading-[1.02] md:text-7xl">
-            {c(
-              "cinematic_moment",
-              "title",
-              "One saved memory can become the reason for the whole journey.",
-            )}
-          </h2>
-          {quote && (
-            <figure className="max-w-2xl border-l border-white/30 pl-6">
-              <Quote className="mb-4 size-8 text-[#d7aa73]" />
-              <blockquote className="text-2xl font-semibold leading-10 text-white/90">
-                "{quote.caption}{" "}
-                {c(
-                  "cinematic_moment",
-                  "quote_suffix",
-                  "felt like the world went quiet for a few minutes.",
-                )}
-                "
-              </blockquote>
-              <figcaption className="mt-5 text-sm font-bold text-white/68">
-                {quote.author} · Visited Apr 2026
-              </figcaption>
-            </figure>
-          )}
         </div>
       </div>
     </section>

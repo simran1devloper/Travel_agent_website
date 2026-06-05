@@ -11,7 +11,6 @@ const links = [
   { to: "/packages", label: "Packages" },
   { to: "/offers", label: "Offers" },
   { to: "/services", label: "Services" },
-  { to: "/about", label: "About" },
   { to: "/contact", label: "Contact" },
 ] as const;
 
@@ -30,27 +29,34 @@ export function SiteNav() {
     <nav
       className={`sticky top-0 z-50 w-full border-b px-4 py-3 transition-all duration-300 md:px-6 ${
         scrolled
-          ? "border-border bg-background/88 shadow-[0_16px_50px_rgba(14,23,38,0.08)] backdrop-blur-2xl"
-          : "border-white/10 bg-background/55 backdrop-blur-xl"
+          ? "border-border bg-[#f7f4ef]/92 shadow-[0_16px_50px_rgba(14,23,38,0.08)] backdrop-blur-2xl"
+          : "border-border/70 bg-[#f7f4ef]/88 backdrop-blur-xl"
       }`}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-        <Link to="/" className="group flex items-center gap-3 focus-ring rounded-full">
-          <div className="grid size-9 place-items-center rounded-full bg-foreground text-[11px] font-black text-background transition-transform group-hover:scale-105">
+        <Link to="/" className="group flex items-center gap-3 rounded-full focus-ring">
+          <div className="grid size-11 place-items-center rounded-full bg-[#070a0e] text-[11px] font-black text-white transition-transform group-hover:scale-105">
             JM
           </div>
-          <span className="text-base font-extrabold uppercase leading-none tracking-normal md:text-lg">
-            JourneyMakers
+          <span className="flex flex-col leading-none">
+            <span className="text-base font-extrabold uppercase tracking-normal md:text-lg">
+              JourneyMakers
+            </span>
+            <span className="mt-1 hidden text-sm font-semibold normal-case text-foreground/72 sm:block">
+              Crafting unforgettable journeys
+            </span>
           </span>
         </Link>
 
-        <div className="hidden items-center gap-1 rounded-full border border-border bg-white/30 p-1 text-sm font-semibold shadow-sm lg:flex">
+        <div className="hidden items-center gap-1 rounded-full text-sm font-semibold lg:flex">
           {links.map((l) => (
             <Link
               key={l.to}
               to={l.to}
-              className="rounded-full px-4 py-2 text-foreground/72 transition-colors hover:bg-white/55 hover:text-foreground focus-ring"
-              activeProps={{ className: "bg-white text-foreground shadow-sm" }}
+              className="rounded-full px-4 py-2 text-foreground/70 transition-colors hover:bg-white/70 hover:text-foreground focus-ring"
+              activeProps={{
+                className: "bg-white text-foreground shadow-[0_8px_24px_rgba(14,23,38,0.1)]",
+              }}
             >
               {l.label}
             </Link>
@@ -61,9 +67,9 @@ export function SiteNav() {
           <UserMenu />
           <Link
             to="/booking"
-            className="group inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-3 text-xs font-extrabold uppercase tracking-normal text-background shadow-[0_14px_36px_rgba(14,23,38,0.18)] transition-all hover:-translate-y-0.5 hover:bg-accent hover:shadow-[0_16px_42px_rgba(199,107,47,0.28)] focus-ring"
+            className="group inline-flex items-center gap-2 rounded-full bg-[#070a0e] px-5 py-3 text-xs font-extrabold uppercase tracking-normal text-white shadow-[0_14px_36px_rgba(14,23,38,0.18)] transition-all hover:-translate-y-0.5 hover:bg-accent hover:shadow-[0_16px_42px_rgba(199,107,47,0.28)] focus-ring"
           >
-            Inquire{" "}
+            Inquire Now{" "}
             <ArrowUpRight className="size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </Link>
           <button

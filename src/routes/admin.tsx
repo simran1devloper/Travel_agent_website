@@ -4699,6 +4699,45 @@ function PagesTab() {
     global: "Global / Brand",
   };
 
+  const CONTACT_CARD_FIELDS = [
+    {
+      section: "contact_card",
+      key: "company_name",
+      label: "Company name",
+      fallback: "JourneyMakers",
+    },
+    {
+      section: "contact_card",
+      key: "agent_name",
+      label: "Agent name",
+      fallback: "Sonia Mehra",
+    },
+    {
+      section: "contact_card",
+      key: "agent_role",
+      label: "Agent role",
+      fallback: "Senior Travel Expert",
+    },
+    {
+      section: "contact_card",
+      key: "phone",
+      label: "Display phone",
+      fallback: "+1 (555) 123-4567",
+    },
+    {
+      section: "contact_card",
+      key: "whatsapp",
+      label: "WhatsApp number",
+      fallback: "15551234567",
+    },
+    {
+      section: "contact_card",
+      key: "location",
+      label: "Company location",
+      fallback: "JourneyMakers Travel Desk, New York, USA",
+    },
+  ];
+
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       {/* Page list */}
@@ -4748,6 +4787,54 @@ function PagesTab() {
         </div>
 
         <div className="grid gap-8">
+          {activePage === "footer" && (
+            <div className="rounded-2xl border border-accent/30 bg-accent/5 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-widest text-accent">
+                    Contact card
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                    These values appear when users open any WhatsApp/contact icon.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    CONTACT_CARD_FIELDS.forEach((field) =>
+                      handleChange(field.section, field.key, ""),
+                    );
+                  }}
+                  className="rounded-full border border-border bg-background px-4 py-2 text-xs font-bold text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                {CONTACT_CARD_FIELDS.map((field) => {
+                  const editKey = getEditKey(field.section, field.key);
+                  const current =
+                    editKey in edits
+                      ? getValue(field.section, field.key)
+                      : getValue(field.section, field.key) || field.fallback;
+                  return (
+                    <div key={field.key}>
+                      <label className="mb-1.5 block text-xs font-bold text-foreground/70">
+                        {field.label}
+                      </label>
+                      <input
+                        type="text"
+                        value={current}
+                        onChange={(e) => handleChange(field.section, field.key, e.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-foreground"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {Object.entries(pageData).map(([section, fields]) => (
             <div key={section} className="rounded-2xl border border-border p-5">
               <p className="mb-4 text-xs font-extrabold uppercase tracking-widest text-muted-foreground">

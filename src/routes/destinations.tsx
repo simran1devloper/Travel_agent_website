@@ -2,15 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUpRight,
+  CalendarDays,
   Camera,
+  Compass,
   Flame,
   Heart,
+  Info,
   MapPin,
   Play,
   Plus,
   Sparkles,
   Star,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -221,6 +225,141 @@ const destinationProfiles: Record<
   },
 };
 
+const destinationSpecs: Record<
+  string,
+  {
+    location: string;
+    bestTime: string;
+    language: string;
+    currency: string;
+    idealStay: string;
+    travelStyle: string;
+    funFacts: string[];
+    localHighlights: string[];
+    practicalNotes: string[];
+  }
+> = {
+  "bangkok-singapore": {
+    location: "Thailand and Singapore, Southeast Asia",
+    bestTime: "November to March for cooler city days",
+    language: "Thai, English, Mandarin, Malay",
+    currency: "Thai Baht and Singapore Dollar",
+    idealStay: "8 to 10 days",
+    travelStyle: "Food-led city break with skyline hotels",
+    funFacts: [
+      "Bangkok has more than 400 temples across the city.",
+      "Singapore's Gardens by the Bay has Supertrees up to 50 meters tall.",
+      "Both cities are famous for late-night food culture.",
+    ],
+    localHighlights: [
+      "Floating markets",
+      "Marina Bay",
+      "Rooftop dining",
+      "Private street food route",
+    ],
+    practicalNotes: [
+      "Light clothing works best",
+      "Carry rain cover in monsoon months",
+      "Private transfers keep the route smooth",
+    ],
+  },
+  newyork: {
+    location: "New York, United States",
+    bestTime: "April to June or September to November",
+    language: "English",
+    currency: "US Dollar",
+    idealStay: "5 to 8 days",
+    travelStyle: "Art, theatre, food, rooftops, and neighborhood walks",
+    funFacts: [
+      "New York has over 800 languages spoken across its boroughs.",
+      "Central Park is larger than Monaco.",
+      "The subway runs 24 hours a day.",
+    ],
+    localHighlights: ["Broadway", "Brooklyn Bridge", "Museum after-hours", "Rooftop dining"],
+    practicalNotes: [
+      "Comfortable walking shoes matter",
+      "Reserve popular restaurants early",
+      "Use private transfers for late nights",
+    ],
+  },
+  salonei: {
+    location: "Coastal Mediterranean escape",
+    bestTime: "May to September for warm beaches",
+    language: "Local coastal dialects and English in resorts",
+    currency: "Euro",
+    idealStay: "6 to 9 days",
+    travelStyle: "Slow beach days, markets, boats, and private coves",
+    funFacts: [
+      "Many coastal towns still hold early morning fish auctions.",
+      "Local family tavernas often change menus with the catch of the day.",
+      "Sunset boat routes are a favorite honeymoon memory.",
+    ],
+    localHighlights: ["Private coves", "Sunset boat", "Fish markets", "Old town walks"],
+    practicalNotes: [
+      "Book boats early in summer",
+      "Pack reef-safe sunscreen",
+      "Choose late dinners for local atmosphere",
+    ],
+  },
+  switzerland: {
+    location: "Swiss Alps and lake towns, Switzerland",
+    bestTime: "June to September for lakes, December to March for snow",
+    language: "German, French, Italian, Romansh",
+    currency: "Swiss Franc",
+    idealStay: "8 to 11 days",
+    travelStyle: "Scenic rail, alpine hotels, lakes, and slow luxury",
+    funFacts: [
+      "Switzerland has more than 7,000 lakes.",
+      "The Glacier Express is known as one of the world's slowest express trains.",
+      "Many mountain villages are car-free.",
+    ],
+    localHighlights: ["Glacier Express", "Lake mornings", "Chalet terraces", "Mountain dining"],
+    practicalNotes: [
+      "Layered clothing is essential",
+      "Rail reservations are worth planning",
+      "Altitude changes can affect pacing",
+    ],
+  },
+  "tokyo-seoul": {
+    location: "Japan and South Korea, East Asia",
+    bestTime: "March to May or October to November",
+    language: "Japanese, Korean, English in key travel areas",
+    currency: "Japanese Yen and Korean Won",
+    idealStay: "9 to 12 days",
+    travelStyle: "Design, food, nightlife, shopping, and culture",
+    funFacts: [
+      "Tokyo has more Michelin-starred restaurants than any other city.",
+      "Seoul's palaces sit beside futuristic shopping districts.",
+      "Convenience-store food is a real traveler favorite in both cities.",
+    ],
+    localHighlights: ["Shinjuku nights", "Seoul palaces", "Korean BBQ", "Design stores"],
+    practicalNotes: [
+      "Carry a transit card",
+      "Plan restaurant queues",
+      "Pack light for train transfers",
+    ],
+  },
+  vietnam: {
+    location: "Vietnam, Southeast Asia",
+    bestTime: "February to April for balanced weather",
+    language: "Vietnamese",
+    currency: "Vietnamese Dong",
+    idealStay: "7 to 12 days",
+    travelStyle: "River journeys, street food, lantern towns, and bays",
+    funFacts: [
+      "Vietnam is one of the world's largest coffee producers.",
+      "Hoi An's lantern nights are tied to monthly lunar traditions.",
+      "Ha Long Bay has thousands of limestone islands and islets.",
+    ],
+    localHighlights: ["Ha Long Bay", "Hoi An lanterns", "Mekong cruise", "Street food walks"],
+    practicalNotes: [
+      "Regional weather varies a lot",
+      "Street food tours are best with a local guide",
+      "Domestic flights save time",
+    ],
+  },
+};
+
 const filters = [
   { id: "most", label: "Most Shared", icon: Flame },
   { id: "cinematic", label: "Cinematic", icon: Play },
@@ -345,6 +484,7 @@ function DestinationGrid() {
   });
 
   const [activeFilter, setActiveFilter] = useDestinationFilterState();
+  const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
 
   // Real tag-based filtering using destination name/slug/tagline patterns
   const filteredDestinations = destinations.filter((d) => {
@@ -445,20 +585,35 @@ function DestinationGrid() {
         ) : (
           <div className="grid grid-cols-1 gap-7 md:grid-cols-2 xl:grid-cols-3">
             {filteredDestinations.map((destination) => (
-              <DestinationCard key={destination.slug} destination={destination} />
+              <DestinationCard
+                key={destination.slug}
+                destination={destination}
+                onOpen={() => setSelectedDestination(destination)}
+              />
             ))}
           </div>
         )}
       </div>
+      <DestinationDetailModal
+        destination={selectedDestination}
+        onClose={() => setSelectedDestination(null)}
+      />
     </section>
   );
 }
 
-function DestinationCard({ destination }: { destination: Destination }) {
+function DestinationCard({
+  destination,
+  onOpen,
+}: {
+  destination: Destination;
+  onOpen: () => void;
+}) {
   const profile = destinationProfiles[destination.slug];
   return (
-    <Link
-      to="/packages"
+    <button
+      type="button"
+      onClick={onOpen}
       className="group overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_54px_rgba(14,23,38,0.08)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_28px_80px_rgba(14,23,38,0.14)]"
     >
       <div className="relative aspect-[4/5] overflow-hidden">
@@ -515,7 +670,145 @@ function DestinationCard({ destination }: { destination: Destination }) {
           <ArrowUpRight className="size-5 text-foreground transition-transform group-hover:translate-x-1" />
         </div>
       </div>
-    </Link>
+    </button>
+  );
+}
+
+function DestinationDetailModal({
+  destination,
+  onClose,
+}: {
+  destination: Destination | null;
+  onClose: () => void;
+}) {
+  if (!destination) return null;
+
+  const profile = destinationProfiles[destination.slug];
+  const specs =
+    destinationSpecs[destination.slug] ??
+    ({
+      location: destination.name,
+      bestTime: "Year-round with seasonal planning",
+      language: "Local language and English in major travel areas",
+      currency: "Local currency",
+      idealStay: destination.duration ?? "5 to 8 days",
+      travelStyle: profile?.bestFor ?? "Private curated travel",
+      funFacts: [
+        `${destination.name} is one of our most requested custom travel ideas.`,
+        "Traveler moments help planners shape the pace before bookings begin.",
+      ],
+      localHighlights: profile?.popular ?? ["Private guide route", "Local dining", "Scenic stay"],
+      practicalNotes: [
+        "Plan transfers early",
+        "Share dietary needs before travel",
+        "Build free time into the itinerary",
+      ],
+    } satisfies (typeof destinationSpecs)[string]);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 px-4 py-6 backdrop-blur-md">
+      <div className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-[#fbf8f3] shadow-2xl">
+        <div className="relative min-h-[300px]">
+          <img
+            src={destination.image}
+            alt={destination.name}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/82 via-black/20 to-transparent" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close destination details"
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md hover:bg-black/65"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="absolute bottom-0 left-0 right-0 p-6 text-white md:p-8">
+            <p className="mb-2 flex items-center gap-2 text-sm font-bold text-[#eda36b]">
+              <MapPin className="size-4" /> {specs.location}
+            </p>
+            <h2 className="text-4xl font-black leading-tight md:text-6xl">{destination.name}</h2>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-white/82">
+              {destination.tagline ?? profile?.quote}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 p-6 md:p-8 lg:grid-cols-[0.95fr_1.05fr]">
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <SpecTile icon={CalendarDays} label="Best time" value={specs.bestTime} />
+              <SpecTile icon={Compass} label="Ideal stay" value={specs.idealStay} />
+              <SpecTile icon={Info} label="Language" value={specs.language} />
+              <SpecTile icon={Star} label="Currency" value={specs.currency} />
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-border bg-white/70 p-5">
+              <p className="text-xs font-black uppercase text-accent">Travel style</p>
+              <p className="mt-2 text-xl font-black leading-snug">{specs.travelStyle}</p>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+                "{profile?.quote}"{" "}
+                <span className="font-bold text-foreground/70">- {profile?.quoteAuthor}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <DetailList title="Local highlights" items={specs.localHighlights} />
+            <DetailList title="Fun facts" items={specs.funFacts} />
+            <DetailList title="Planning notes" items={specs.practicalNotes} />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                to="/packages"
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#171717] px-5 text-sm font-extrabold text-white hover:bg-accent focus-ring"
+              >
+                See matching packages <ArrowUpRight className="size-4" />
+              </Link>
+              <Link
+                to="/booking"
+                className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full border border-border bg-white px-5 text-sm font-extrabold text-foreground hover:border-accent hover:text-accent focus-ring"
+              >
+                Plan this destination
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpecTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-border bg-white/70 p-4">
+      <Icon className="mb-3 size-5 text-accent" />
+      <p className="text-[11px] font-black uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-extrabold leading-5">{value}</p>
+    </div>
+  );
+}
+
+function DetailList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-border bg-white/70 p-5">
+      <p className="mb-3 text-xs font-black uppercase text-accent">{title}</p>
+      <ul className="grid gap-2 text-sm font-semibold leading-6 text-foreground/76">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2">
+            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

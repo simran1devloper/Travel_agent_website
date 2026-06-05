@@ -1,15 +1,25 @@
-import { MessageCircle } from "lucide-react";
+import { useState } from "react";
+import { ContactInfoCard } from "@/components/contact-info-card";
+import { WhatsAppIcon } from "@/components/whatsapp-icon";
 
 export function WhatsAppFab() {
+  const [open, setOpen] = useState(false);
+
   return (
-    <a
-      href="https://wa.me/15551234567?text=Hi%20JourneyMakers%2C%20I%27d%20like%20to%20plan%20a%20trip."
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Chat on WhatsApp"
-      className="fixed bottom-6 right-6 z-40 size-14 rounded-full bg-accent text-white shadow-2xl flex items-center justify-center hover:scale-110 transition-transform"
-    >
-      <MessageCircle className="size-6" />
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Open JourneyMakers contact information"
+        className="fixed bottom-6 right-6 z-40 flex size-16 items-center justify-center rounded-[22px] bg-transparent shadow-2xl transition-transform hover:scale-110 focus-ring"
+      >
+        <WhatsAppIcon className="size-16" />
+      </button>
+      <ContactInfoCard
+        open={open}
+        onClose={() => setOpen(false)}
+        message="Hi JourneyMakers, I'd like to plan a trip."
+      />
+    </>
   );
 }

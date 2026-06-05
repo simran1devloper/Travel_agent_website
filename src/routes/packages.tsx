@@ -7,7 +7,9 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Heart,
+  Info,
   MapPin,
   MessageCircle,
   ShieldCheck,
@@ -235,6 +237,113 @@ const placesByPackage: Record<string, JourneyPlace[]> = {
   ],
 };
 
+const packageSpecs: Record<
+  string,
+  {
+    bestTime: string;
+    pace: string;
+    stayStyle: string;
+    idealFor: string;
+    route: string[];
+    inclusions: string[];
+    funFacts: string[];
+    planningNotes: string[];
+  }
+> = {
+  "bangkok-singapore": {
+    bestTime: "November to March",
+    pace: "Medium pace with food-led evenings",
+    stayStyle: "Skyline hotels and private transfers",
+    idealFor: "Couples, friends, first-time Asia travelers",
+    route: ["Bangkok", "Singapore"],
+    inclusions: [
+      "Private airport transfers",
+      "Rooftop dining reservation",
+      "Guided market route",
+      "Marina Bay evening plan",
+    ],
+    funFacts: [
+      "Bangkok and Singapore are both globally loved street-food cities.",
+      "This pairing balances traditional temple mornings with futuristic skyline nights.",
+      "Many travelers save this route for food, shopping, and short-haul luxury.",
+    ],
+    planningNotes: [
+      "Add one free evening in each city",
+      "Reserve restaurants early",
+      "Pack breathable clothing",
+    ],
+  },
+  "newyork-citypulse": {
+    bestTime: "April to June or September to November",
+    pace: "High-energy days with flexible evenings",
+    stayStyle: "Boutique city hotels near dining and theatre",
+    idealFor: "Culture lovers, families, couples, city explorers",
+    route: ["Manhattan", "Brooklyn"],
+    inclusions: [
+      "Theatre planning",
+      "Private gallery route",
+      "Rooftop table suggestions",
+      "Neighborhood food map",
+    ],
+    funFacts: [
+      "Central Park is larger than Monaco.",
+      "New York has one of the world's most diverse dining scenes.",
+      "The city is best experienced by neighborhood, not checklist.",
+    ],
+    planningNotes: [
+      "Book shows early",
+      "Use private transfers for late nights",
+      "Build walking breaks into each day",
+    ],
+  },
+  "salonei-retreat": {
+    bestTime: "May to September",
+    pace: "Slow and restorative",
+    stayStyle: "Coastal boutique stays and private boats",
+    idealFor: "Honeymoons, beach lovers, slow travel",
+    route: ["Old town", "Private coves", "Fishing harbor"],
+    inclusions: [
+      "Sunset boat option",
+      "Market breakfast walk",
+      "Beach club reservation",
+      "Private transfer plan",
+    ],
+    funFacts: [
+      "Local menus often change with the morning catch.",
+      "The best beach hours are usually early morning and late afternoon.",
+      "Slow coastal journeys work best with fewer hotel moves.",
+    ],
+    planningNotes: [
+      "Keep one unscheduled day",
+      "Book boats before peak season",
+      "Pack light layers for evenings",
+    ],
+  },
+  "switzerland-alpine": {
+    bestTime: "June to September or December to March",
+    pace: "Slow scenic route with rail days",
+    stayStyle: "Lake hotels, alpine lodges, and chalet terraces",
+    idealFor: "Scenic rail lovers, families, luxury nature travel",
+    route: ["Zurich", "Interlaken", "Zermatt", "Lake towns"],
+    inclusions: [
+      "Rail reservation guidance",
+      "Mountain-view stay planning",
+      "Lake morning route",
+      "Chalet dining suggestions",
+    ],
+    funFacts: [
+      "The Glacier Express is famous for panoramic slow travel.",
+      "Switzerland has thousands of lakes.",
+      "Many alpine villages are best explored without cars.",
+    ],
+    planningNotes: [
+      "Reserve panoramic rail seats",
+      "Pack layers",
+      "Avoid overloading mountain days",
+    ],
+  },
+};
+
 function PackagesPage() {
   return (
     <>
@@ -371,6 +480,7 @@ function FeaturedJourneys() {
   });
 
   const [filterState, setFilterState, resetFilter] = usePackageFilterState();
+  const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
 
   // Selected budget label (stored as minDays/maxDays not ideal, use category for budget label)
   const [selectedBudgetLabel, setSelectedBudgetLabel] = useState<string>("");
@@ -559,6 +669,7 @@ function FeaturedJourneys() {
                 key={packageItem.slug}
                 index={index}
                 packageItem={packageItem}
+                onOpenDetails={() => setSelectedPackage(packageItem)}
               />
             ))
           )}
@@ -576,11 +687,20 @@ function FeaturedJourneys() {
           </div>
         )}
       </div>
+      <PackageDetailModal packageItem={selectedPackage} onClose={() => setSelectedPackage(null)} />
     </section>
   );
 }
 
-function DestinationStoryCard({ packageItem, index }: { packageItem: PackageItem; index: number }) {
+function DestinationStoryCard({
+  packageItem,
+  index,
+  onOpenDetails,
+}: {
+  packageItem: PackageItem;
+  index: number;
+  onOpenDetails: () => void;
+}) {
   const places = getPlacesForPackage(packageItem);
   const fallbackMoments = places.flatMap((place) =>
     getPlaceGallery(place, packageItem)
@@ -642,7 +762,12 @@ function DestinationStoryCard({ packageItem, index }: { packageItem: PackageItem
       </div>
 
       <div className="grid gap-8 p-5 md:p-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <JourneyDetailPanel packageItem={packageItem} places={places} topMoments={topMoments} />
+        <JourneyDetailPanel
+          packageItem={packageItem}
+          places={places}
+          topMoments={topMoments}
+          onOpenDetails={onOpenDetails}
+        />
 
         <div>
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -685,10 +810,12 @@ function JourneyDetailPanel({
   packageItem,
   places,
   topMoments,
+  onOpenDetails,
 }: {
   packageItem: PackageItem;
   places: JourneyPlace[];
   topMoments: string[];
+  onOpenDetails: () => void;
 }) {
   const [saving, setSaving] = useState(false);
   // Guest wishlist persists in localStorage; API wishlist used when logged in
@@ -703,6 +830,14 @@ function JourneyDetailPanel({
         <SimpleMeta icon={MapPin} label={`${places.length} stops`} />
         <SimpleMeta icon={Star} label={`${packageItem.rating} rating`} />
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenDetails}
+        className="mb-6 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-black/12 bg-[#f7f2ea] px-5 text-sm font-extrabold text-foreground transition-all hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-ring"
+      >
+        View full specifications <Info className="size-4" />
+      </button>
 
       <h3 className="mb-4 text-xl font-black">Top experiences</h3>
       <ul className="space-y-3 text-base font-semibold text-foreground/78">
@@ -781,6 +916,170 @@ function SimpleMeta({
     <div className="flex flex-col gap-2">
       <Icon className="size-4 text-[#c76b2f]" />
       <span className="text-sm font-black">{label}</span>
+    </div>
+  );
+}
+
+function PackageDetailModal({
+  packageItem,
+  onClose,
+}: {
+  packageItem: PackageItem | null;
+  onClose: () => void;
+}) {
+  if (!packageItem) return null;
+
+  const places = getPlacesForPackage(packageItem);
+  const spec =
+    packageSpecs[packageItem.slug] ??
+    ({
+      bestTime: "Year-round with seasonal planning",
+      pace: `${packageItem.days}-day private journey`,
+      stayStyle: "Curated stays matched to your comfort",
+      idealFor: packageItem.category,
+      route: places.map((place) => place.name),
+      inclusions: [
+        "Private planning call",
+        "Custom itinerary design",
+        "Stay and transfer guidance",
+        "Concierge support",
+      ],
+      funFacts: [
+        "This route can be adjusted around traveler memories, not only standard attractions.",
+        "JourneyMakers planners tune the pace before confirming hotels and transfers.",
+      ],
+      planningNotes: [
+        "Share preferred pace early",
+        "Mention dietary needs",
+        "Keep room for one flexible local evening",
+      ],
+    } satisfies (typeof packageSpecs)[string]);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 px-4 py-6 backdrop-blur-md">
+      <div className="mx-auto max-w-5xl overflow-hidden rounded-3xl bg-[#fffaf2] shadow-2xl">
+        <div className="relative min-h-[320px]">
+          <img
+            src={packageItem.image}
+            alt={packageItem.title}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/84 via-black/20 to-transparent" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close package details"
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-black/45 text-white backdrop-blur-md hover:bg-black/65"
+          >
+            <X className="size-5" />
+          </button>
+          <div className="absolute bottom-0 left-0 right-0 p-6 text-white md:p-8">
+            <p className="mb-2 flex items-center gap-2 text-sm font-bold text-[#eda36b]">
+              <MapPin className="size-4" /> {packageItem.location}
+            </p>
+            <h2 className="max-w-4xl text-4xl font-black leading-tight md:text-6xl">
+              {packageItem.title}
+            </h2>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-white/82">
+              {packageStories[packageItem.slug] ?? packageItem.description ?? packageItem.tagline}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 p-6 md:p-8 lg:grid-cols-[0.95fr_1.05fr]">
+          <div>
+            <div className="grid grid-cols-2 gap-3">
+              <PackageSpecTile
+                icon={CalendarDays}
+                label="Duration"
+                value={`${packageItem.days} days`}
+              />
+              <PackageSpecTile icon={Clock3} label="Best time" value={spec.bestTime} />
+              <PackageSpecTile icon={MapPin} label="Route" value={spec.route.join(" + ")} />
+              <PackageSpecTile
+                icon={Star}
+                label="Starting from"
+                value={`₹${packageItem.price.toLocaleString("en-IN")}`}
+              />
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-black/10 bg-white p-5">
+              <p className="text-xs font-black uppercase text-accent">Journey profile</p>
+              <div className="mt-4 grid gap-3 text-sm font-semibold text-foreground/78">
+                <ProfileLine label="Pace" value={spec.pace} />
+                <ProfileLine label="Stay style" value={spec.stayStyle} />
+                <ProfileLine label="Ideal for" value={spec.idealFor} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <PackageDetailList title="Included planning" items={spec.inclusions} />
+            <PackageDetailList title="Fun facts" items={spec.funFacts} />
+            <PackageDetailList title="Planning notes" items={spec.planningNotes} />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                to="/booking"
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#171717] px-5 text-sm font-extrabold text-white hover:bg-accent focus-ring"
+              >
+                Plan this package <ArrowUpRight className="size-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full border border-black/12 bg-white px-5 text-sm font-extrabold text-foreground hover:border-accent hover:text-accent focus-ring"
+              >
+                Back to packages
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PackageSpecTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-4">
+      <Icon className="mb-3 size-5 text-accent" />
+      <p className="text-[11px] font-black uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-extrabold leading-5">{value}</p>
+    </div>
+  );
+}
+
+function ProfileLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-3 border-b border-black/10 pb-3 last:border-0 last:pb-0">
+      <span className="w-24 shrink-0 text-xs font-black uppercase text-muted-foreground">
+        {label}
+      </span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function PackageDetailList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white p-5">
+      <p className="mb-3 text-xs font-black uppercase text-accent">{title}</p>
+      <ul className="grid gap-2 text-sm font-semibold leading-6 text-foreground/76">
+        {items.map((item) => (
+          <li key={item} className="flex gap-2">
+            <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+            {item}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

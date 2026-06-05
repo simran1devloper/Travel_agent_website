@@ -505,6 +505,16 @@ export const api = {
     }),
 
   // Admin media
+  adminUploadMedia: (file: File, altText?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (altText) form.append("alt_text", altText);
+    return request<{ id: number; url: string }>("/media", {
+      method: "POST",
+      admin: true,
+      body: form,
+    });
+  },
   adminListMedia: (page = 1) =>
     request<AdminMediaPage>(`/admin/media?page=${page}&per_page=20`, { admin: true }),
   adminUpdateMedia: (
