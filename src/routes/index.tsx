@@ -429,8 +429,8 @@ function HomeAboutSection() {
 
             <div className="relative min-h-[420px] lg:min-h-full">
               <img
-                src={MEDIA.destinations["bangkok-singapore"]}
-                alt="International city waterfront at sunset"
+                src={MEDIA.aboutDubaiSunset}
+                alt="Dubai luxury waterfront at sunset"
                 loading="lazy"
                 className="absolute inset-0 h-full w-full rounded-2xl object-cover shadow-[0_26px_70px_rgba(112,75,38,0.16)]"
                 style={{

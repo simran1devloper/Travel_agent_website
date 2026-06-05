@@ -7,10 +7,12 @@ import salonei from "@/assets/Salonei.jpeg";
 import switzerland from "@/assets/swizerland.jpeg";
 import tokyoSeoul from "@/assets/Tokyo & Seoul.jpeg";
 import vietnam from "@/assets/vitenam.jpeg";
+import aboutDubaiSunset from "@/assets/about-dubai-sunset.png";
 
 export const MEDIA = {
   heroVideo: "/videodesign.mp4",
   heroPoster: bangkokSingapore,
+  aboutDubaiSunset,
   destinations: {
     "bangkok-singapore": bangkokSingapore,
     newyork: newYork,
