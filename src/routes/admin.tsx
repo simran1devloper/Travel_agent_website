@@ -19,6 +19,7 @@ import {
   type PackagePayload,
   type DestinationPayload,
   type ApiService,
+  type ServicePayload,
   type ApiFaq,
   type ApiTestimonial,
   type ApiSiteStat,
@@ -531,11 +532,13 @@ function BulkDeleteConfirm({
 type AdminTab =
   | "overview"
   | "packages"
+  | "services"
   | "media"
   | "reviews"
   | "planners"
   | "content"
   | "offers"
+  | "contact"
   | "pages";
 
 function AdminPage() {
@@ -623,12 +626,14 @@ function AdminContent() {
   const tabs: { key: AdminTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "packages", label: "Packages" },
+    { key: "services", label: "Services" },
     { key: "content", label: "Content" },
     { key: "media", label: "Media" },
     { key: "reviews", label: "Reviews" },
     { key: "planners", label: "Planners" },
     { key: "offers", label: "Offers" },
     { key: "pages", label: "Pages" },
+    { key: "contact", label: "Contact" },
   ];
 
   return (
@@ -653,12 +658,14 @@ function AdminContent() {
 
       {activeTab === "overview" && <OverviewTab />}
       {activeTab === "packages" && <PackagesTab />}
+      {activeTab === "services" && <ServicesTab />}
       {activeTab === "content" && <ContentTab />}
       {activeTab === "media" && <MediaTab />}
       {activeTab === "reviews" && <ReviewsTab />}
       {activeTab === "planners" && <PlannersTab />}
       {activeTab === "offers" && <OffersTab />}
       {activeTab === "pages" && <PagesTab />}
+      {activeTab === "contact" && <ContactTab />}
     </PageShell>
   );
 }
@@ -3517,12 +3524,1153 @@ function CsvCard({
   );
 }
 
-// ── Content tab — Services / FAQs / Testimonials / Site Stats ─────────────────
+// ── Services tab ──────────────────────────────────────────────────────────────
+
+const SERVICE_STATUS = ["published", "draft", "hidden"] as const;
+const SERVICE_DISPLAY_FILTERS = [
+  { key: "homepage", label: "Homepage" },
+  { key: "services_page", label: "Services page" },
+  { key: "hero_card", label: "Hero services card" },
+  { key: "footer", label: "Footer services" },
+] as const;
+
+function serviceToForm(service?: ApiService): ServicePayload {
+  return {
+    id: service?.id ?? "",
+    name: service?.name ?? "",
+    category: service?.category ?? "",
+    short_description: service?.short_description ?? service?.description ?? "",
+    description: service?.description ?? "",
+    detailed_description: service?.detailed_description ?? service?.description ?? "",
+    image_url:
+      service?.image_url ?? service?.gallery?.find((item) => item.type === "photo")?.src ?? "",
+    icon_url: service?.icon_url ?? "",
+    image_alt: service?.image_alt ?? service?.name ?? "",
+    rating: service?.rating ?? 5,
+    review_count: service?.review_count ?? 0,
+    highlight: service?.highlight ?? "",
+    badge_text: service?.badge_text ?? "",
+    cta_text: service?.cta_text ?? "Explore",
+    cta_link: service?.cta_link ?? "/services",
+    show_homepage: service?.show_homepage ?? true,
+    show_services_page: service?.show_services_page ?? true,
+    show_hero_card: service?.show_hero_card ?? false,
+    show_footer: service?.show_footer ?? false,
+    status: service?.status ?? "published",
+    gallery: service?.gallery ?? [],
+    sort_order: service?.sort_order ?? 0,
+  };
+}
+
+function ServicesTab() {
+  const qc = useQueryClient();
+  const servicesQ = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const services = servicesQ.data ?? [];
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [display, setDisplay] = useState("all");
+  const [editing, setEditing] = useState<ServicePayload | null>(null);
+  const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
+  const bulk = useBulkSelect(services, (s) => s.id);
+
+  const categories = Array.from(new Set(services.map((s) => s.category).filter(Boolean)));
+  const filtered = services.filter((service) => {
+    const haystack =
+      `${service.name} ${service.category ?? ""} ${service.description}`.toLowerCase();
+    const matchesQuery = haystack.includes(query.trim().toLowerCase());
+    const matchesCategory = category === "all" || service.category === category;
+    const matchesStatus = status === "all" || (service.status ?? "published") === status;
+    const matchesDisplay =
+      display === "all" ||
+      (display === "homepage" && service.show_homepage !== false) ||
+      (display === "services_page" && service.show_services_page !== false) ||
+      (display === "hero_card" && service.show_hero_card === true) ||
+      (display === "footer" && service.show_footer === true);
+    return matchesQuery && matchesCategory && matchesStatus && matchesDisplay;
+  });
+
+  const saveService = useMutation({
+    mutationFn: (payload: ServicePayload) =>
+      drawerMode === "create" ? api.createService(payload) : api.updateService(payload.id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      setEditing(null);
+    },
+  });
+  const deleteService = useMutation({
+    mutationFn: (id: string) => api.deleteService(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+  const bulkDelete = useMutation({
+    mutationFn: (ids: string[]) => api.adminBulkDelete("services", ids),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["services"] });
+      bulk.clearSelection();
+    },
+  });
+  const quickUpdate = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<ServicePayload> }) =>
+      api.updateService(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
+  });
+
+  function openCreate() {
+    setDrawerMode("create");
+    setEditing(serviceToForm());
+  }
+
+  function openEdit(service: ApiService) {
+    setDrawerMode("edit");
+    setEditing(serviceToForm(service));
+  }
+
+  return (
+    <div className="space-y-6">
+      <SessionBanner error={servicesQ.error as Error | null} />
+      <div className="rounded-2xl border border-border bg-[#fbf6ee] p-6 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <h2 className="text-2xl font-black">Services Management</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+              Add, edit, organize, and publish travel services shown on the homepage and Services
+              page.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-extrabold text-white"
+            >
+              <Plus className="size-4" /> Add New Service
+            </button>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-xs font-bold hover:bg-secondary">
+              <Upload className="size-4" /> Import CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file)
+                    void api
+                      .adminImportCsv("services", file)
+                      .then(() => qc.invalidateQueries({ queryKey: ["services"] }));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => api.adminExportCsv("services")}
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-xs font-bold hover:bg-secondary"
+            >
+              <Download className="size-4" /> Export CSV
+            </button>
+            <button
+              type="button"
+              disabled={bulk.selected.size === 0 || bulkDelete.isPending}
+              onClick={() => bulkDelete.mutate(Array.from(bulk.selected))}
+              className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-40"
+            >
+              <Trash2 className="size-4" /> Bulk Delete
+            </button>
+            <Link
+              to="/services"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 text-xs font-bold hover:bg-secondary"
+            >
+              Preview Services Page
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-[1.4fr_0.8fr_0.7fr_0.8fr]">
+          <label className="relative">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by service name"
+              className="w-full rounded-xl border border-border bg-white py-2.5 pl-10 pr-4 text-sm outline-none focus:border-accent"
+            />
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="rounded-xl border border-border bg-white px-3 py-2.5 text-sm"
+          >
+            <option value="all">All categories</option>
+            {categories.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="rounded-xl border border-border bg-white px-3 py-2.5 text-sm"
+          >
+            <option value="all">All statuses</option>
+            {SERVICE_STATUS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <select
+            value={display}
+            onChange={(e) => setDisplay(e.target.value)}
+            className="rounded-xl border border-border bg-white px-3 py-2.5 text-sm"
+          >
+            <option value="all">All display locations</option>
+            {SERVICE_DISPLAY_FILTERS.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <BulkBar count={bulk.selected.size} onClear={bulk.clearSelection}>
+        <button
+          type="button"
+          onClick={() => bulkDelete.mutate(Array.from(bulk.selected))}
+          className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50"
+        >
+          <Trash2 className="size-3" /> Delete selected
+        </button>
+      </BulkBar>
+
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
+        <div className="hidden grid-cols-[44px_76px_68px_1.1fr_0.8fr_1.4fr_80px_80px_1fr_90px_80px_150px] gap-3 border-b border-border bg-[#f7f2ea] px-4 py-3 text-[11px] font-black uppercase text-muted-foreground xl:grid">
+          <span>
+            <RowCheck checked={bulk.allSelected} onToggle={bulk.toggleAll} />
+          </span>
+          <span>Image</span>
+          <span>Icon</span>
+          <span>Name</span>
+          <span>Category</span>
+          <span>Short Description</span>
+          <span>Rating</span>
+          <span>Reviews</span>
+          <span>Display</span>
+          <span>Status</span>
+          <span>Order</span>
+          <span>Actions</span>
+        </div>
+        <div className="divide-y divide-border">
+          {filtered.map((service) => (
+            <div
+              key={service.id}
+              className={`grid gap-3 px-4 py-4 xl:grid-cols-[44px_76px_68px_1.1fr_0.8fr_1.4fr_80px_80px_1fr_90px_80px_150px] xl:items-center ${bulk.selected.has(service.id) ? "bg-accent/5" : ""}`}
+            >
+              <RowCheck
+                checked={bulk.selected.has(service.id)}
+                onToggle={() => bulk.toggleOne(service.id)}
+              />
+              <AdminMediaPreview
+                src={resolveAdminMediaUrl(service.image_url, service.id, "160/110")}
+                alt={service.image_alt || service.name}
+                className="h-14 w-20 rounded-lg object-cover"
+              />
+              <div className="grid size-12 place-items-center overflow-hidden rounded-lg border border-border bg-[#f7f2ea]">
+                {service.icon_url ? (
+                  <img
+                    src={resolveAdminMediaUrl(service.icon_url, service.id, "80/80")}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <Image className="size-5 text-accent" />
+                )}
+              </div>
+              <div>
+                <div className="font-black">{service.name}</div>
+                {service.badge_text && (
+                  <span className="mt-1 inline-flex rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-bold text-accent">
+                    {service.badge_text}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-semibold text-muted-foreground">
+                {service.category || "General"}
+              </div>
+              <div className="text-sm leading-6 text-muted-foreground">
+                {service.short_description || service.description}
+              </div>
+              <div className="text-sm font-black">★ {(service.rating ?? 0).toFixed(1)}</div>
+              <div className="text-sm font-bold">{service.review_count ?? 0}</div>
+              <div className="flex flex-wrap gap-1">
+                {[
+                  service.show_homepage !== false && "Home",
+                  service.show_services_page !== false && "Services",
+                  service.show_hero_card && "Hero",
+                  service.show_footer && "Footer",
+                ]
+                  .filter(Boolean)
+                  .map((label) => (
+                    <span
+                      key={label}
+                      className="rounded-full bg-[#f7f2ea] px-2 py-1 text-[10px] font-bold"
+                    >
+                      {label}
+                    </span>
+                  ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  quickUpdate.mutate({
+                    id: service.id,
+                    data: {
+                      status:
+                        (service.status ?? "published") === "published" ? "hidden" : "published",
+                    },
+                  })
+                }
+                className={`rounded-full px-3 py-1.5 text-xs font-bold ${service.status === "hidden" ? "bg-red-50 text-red-600" : service.status === "draft" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}
+              >
+                {service.status ?? "published"}
+              </button>
+              <div className="text-sm font-bold">{service.sort_order ?? 0}</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => openEdit(service)}
+                  className="rounded-full border border-border p-2 hover:bg-secondary"
+                  aria-label="Edit"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <Link
+                  to="/services"
+                  className="rounded-full border border-border p-2 hover:bg-secondary"
+                  aria-label="Preview"
+                >
+                  <Search className="size-3.5" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const copy = serviceToForm(service);
+                    copy.id = `${copy.id}-copy`;
+                    copy.name = `${copy.name} Copy`;
+                    setDrawerMode("create");
+                    setEditing(copy);
+                  }}
+                  className="rounded-full border border-border p-2 hover:bg-secondary"
+                  aria-label="Duplicate"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteService.mutate(service.id)}
+                  className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="p-8 text-center text-sm font-semibold text-muted-foreground">
+              No services match the selected filters.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {editing && (
+        <ServiceEditorDrawer
+          mode={drawerMode}
+          value={editing}
+          pending={saveService.isPending}
+          onChange={setEditing}
+          onClose={() => setEditing(null)}
+          onSave={(payload) => saveService.mutate(payload)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ServiceEditorDrawer({
+  mode,
+  value,
+  pending,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  mode: "create" | "edit";
+  value: ServicePayload;
+  pending: boolean;
+  onChange: Dispatch<SetStateAction<ServicePayload | null>>;
+  onClose: () => void;
+  onSave: (payload: ServicePayload) => void;
+}) {
+  function update<K extends keyof ServicePayload>(key: K, next: ServicePayload[K]) {
+    onChange((current) => (current ? { ...current, [key]: next } : current));
+  }
+
+  async function uploadServiceAsset(file: File, key: "image_url" | "icon_url") {
+    const uploaded = await api.adminUploadMedia(file, value.name || value.id || "service");
+    update(key, uploaded.url);
+    if (key === "image_url" && !value.image_alt) update("image_alt", value.name);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm">
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-3xl flex-col overflow-y-auto bg-background shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-4 backdrop-blur">
+          <div>
+            <p className="text-xs font-black uppercase text-accent">
+              {mode === "create" ? "Add New Service" : "Edit Service"}
+            </p>
+            <h3 className="text-2xl font-black">Service Details</h3>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-full border border-border p-2">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="grid gap-6 p-6">
+          <AdminFormSection title="Basic Information">
+            <AdminTextInput
+              label="Service Name"
+              value={value.name}
+              onChange={(v) => update("name", v)}
+            />
+            <AdminTextInput
+              label="Service Slug"
+              value={value.id}
+              onChange={(v) => update("id", v.toLowerCase().replace(/[^a-z0-9-]+/g, "-"))}
+            />
+            <AdminTextInput
+              label="Service Category"
+              value={value.category ?? ""}
+              onChange={(v) => update("category", v)}
+            />
+            <AdminTextInput
+              label="Short Description"
+              value={value.short_description ?? ""}
+              onChange={(v) => update("short_description", v)}
+              className="sm:col-span-2"
+            />
+            <AdminTextarea
+              label="Detailed Description"
+              value={value.description ?? ""}
+              onChange={(v) => update("description", v)}
+              className="sm:col-span-2"
+            />
+          </AdminFormSection>
+
+          <AdminFormSection title="Media">
+            <ServiceAssetUpload
+              label="Service Image Upload"
+              url={value.image_url ?? ""}
+              onUpload={(file) => uploadServiceAsset(file, "image_url")}
+              onRemove={() => update("image_url", "")}
+            />
+            <ServiceAssetUpload
+              label="Service Icon Upload"
+              url={value.icon_url ?? ""}
+              onUpload={(file) => uploadServiceAsset(file, "icon_url")}
+              onRemove={() => update("icon_url", "")}
+            />
+            <AdminTextInput
+              label="Image Alt Text"
+              value={value.image_alt ?? ""}
+              onChange={(v) => update("image_alt", v)}
+              className="sm:col-span-2"
+            />
+            <p className="text-xs font-semibold text-muted-foreground sm:col-span-2">
+              Recommended image size: 1200 x 800 px.
+            </p>
+          </AdminFormSection>
+
+          <AdminFormSection title="Trust / Marketing Content">
+            <AdminNumberInput
+              label="Rating"
+              value={value.rating ?? 5}
+              min={0}
+              max={5}
+              step={0.1}
+              onChange={(v) => update("rating", v)}
+            />
+            <AdminNumberInput
+              label="Review Count"
+              value={value.review_count ?? 0}
+              min={0}
+              step={1}
+              onChange={(v) => update("review_count", v)}
+            />
+            <AdminTextInput
+              label="Badge Text"
+              value={value.badge_text ?? ""}
+              onChange={(v) => update("badge_text", v)}
+            />
+            <AdminTextarea
+              label="Highlight Quote"
+              value={value.highlight ?? ""}
+              onChange={(v) => update("highlight", v)}
+              className="sm:col-span-2"
+            />
+          </AdminFormSection>
+
+          <AdminFormSection title="CTA">
+            <AdminTextInput
+              label="CTA Text"
+              value={value.cta_text ?? ""}
+              onChange={(v) => update("cta_text", v)}
+            />
+            <AdminTextInput
+              label="CTA Link"
+              value={value.cta_link ?? ""}
+              onChange={(v) => update("cta_link", v)}
+            />
+          </AdminFormSection>
+
+          <AdminFormSection title="Display Control">
+            <ServiceToggle
+              label="Show on Homepage"
+              checked={value.show_homepage ?? true}
+              onChange={(v) => update("show_homepage", v)}
+            />
+            <ServiceToggle
+              label="Show on Services Page"
+              checked={value.show_services_page ?? true}
+              onChange={(v) => update("show_services_page", v)}
+            />
+            <ServiceToggle
+              label="Show in Hero Services Card"
+              checked={value.show_hero_card ?? false}
+              onChange={(v) => update("show_hero_card", v)}
+            />
+            <ServiceToggle
+              label="Show in Footer Services"
+              checked={value.show_footer ?? false}
+              onChange={(v) => update("show_footer", v)}
+            />
+            <label className="text-sm font-bold">
+              Status
+              <select
+                value={value.status ?? "published"}
+                onChange={(e) => update("status", e.target.value as ServicePayload["status"])}
+                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2"
+              >
+                {SERVICE_STATUS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <AdminNumberInput
+              label="Sort Order"
+              value={value.sort_order ?? 0}
+              step={1}
+              onChange={(v) => update("sort_order", v)}
+            />
+          </AdminFormSection>
+        </div>
+
+        <div className="sticky bottom-0 flex flex-col gap-3 border-t border-border bg-background/95 p-5 backdrop-blur sm:flex-row">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onSave({ ...value, status: "draft" })}
+            className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold disabled:opacity-50"
+          >
+            Save as Draft
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onSave({ ...value, status: "published" })}
+            className="min-h-12 flex-1 rounded-full bg-accent px-5 text-sm font-black text-white disabled:opacity-50"
+          >
+            Publish Service
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold"
+          >
+            Cancel
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function AdminFormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-border bg-white/55 p-5">
+      <h4 className="mb-4 text-sm font-black uppercase text-foreground">{title}</h4>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function AdminTextInput({
+  label,
+  value,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`text-sm font-bold ${className}`}>
+      {label}
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+
+function AdminTextarea({
+  label,
+  value,
+  onChange,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  return (
+    <label className={`text-sm font-bold ${className}`}>
+      {label}
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={4}
+        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+
+function AdminNumberInput({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+}) {
+  return (
+    <label className="text-sm font-bold">
+      {label}
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+
+function ServiceToggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex min-h-11 items-center justify-between rounded-lg border border-border bg-background px-3 text-sm font-bold">
+      {label}
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="size-4 accent-[#c76b2f]"
+      />
+    </label>
+  );
+}
+
+function ServiceAssetUpload({
+  label,
+  url,
+  onUpload,
+  onRemove,
+}: {
+  label: string;
+  url: string;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <p className="mb-2 text-sm font-bold">{label}</p>
+      {url ? (
+        <AdminMediaPreview
+          src={resolveAdminMediaUrl(url, label, "320/220")}
+          alt={label}
+          className="mb-3 h-32 w-full rounded-lg object-cover"
+        />
+      ) : (
+        <div className="mb-3 grid h-32 place-items-center rounded-lg border border-dashed border-border text-xs font-bold text-muted-foreground">
+          No asset selected
+        </div>
+      )}
+      <div className="flex gap-2">
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-foreground px-3 py-2 text-xs font-bold text-background">
+          <Upload className="size-3.5" /> Upload
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {url && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="rounded-full border border-border px-3 py-2 text-xs font-bold"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ContentEditorField = {
+  section: string;
+  key: string;
+  label: string;
+  fallback: string;
+  input?: "text" | "textarea" | "url" | "image" | "status";
+};
+
+const ABOUT_SECTION_FIELDS: ContentEditorField[] = [
+  {
+    section: "about_section",
+    key: "label",
+    label: "Section label",
+    fallback: "About JourneyMakers",
+  },
+  {
+    section: "about_section",
+    key: "heading",
+    label: "Main heading",
+    fallback: "We plan journeys that feel personal, smooth, and memorable.",
+    input: "textarea",
+  },
+  {
+    section: "about_section",
+    key: "short_description",
+    label: "Hero card description",
+    fallback:
+      "JourneyMakers helps travelers plan smooth, personalized, and memorable trips. We exist to make travel easier and stress-free by handling destination planning, packages, hotels, flights, transfers, and on-trip support.",
+    input: "textarea",
+  },
+  {
+    section: "about_section",
+    key: "detailed_description",
+    label: "Homepage about description",
+    fallback:
+      "JourneyMakers helps travelers plan customized trips across India and international destinations. From itinerary planning and hotel bookings to flights, transfers, sightseeing, honeymoon packages, family tours, group travel, and corporate retreats, we handle every detail with care and expert support.",
+    input: "textarea",
+  },
+  {
+    section: "about_section",
+    key: "purpose",
+    label: "Purpose line",
+    fallback: "We make travel easier, more meaningful, and stress-free.",
+    input: "textarea",
+  },
+  {
+    section: "about_section",
+    key: "highlight_1",
+    label: "Highlight 1",
+    fallback: "Personalized trip planning",
+  },
+  {
+    section: "about_section",
+    key: "highlight_2",
+    label: "Highlight 2",
+    fallback: "End-to-end support",
+  },
+  {
+    section: "about_section",
+    key: "highlight_3",
+    label: "Highlight 3",
+    fallback: "For couples, families, groups, and corporate travelers",
+  },
+  {
+    section: "about_section",
+    key: "highlight_4",
+    label: "Highlight 4",
+    fallback: "Crafted journeys, not generic packages",
+  },
+  {
+    section: "about_section",
+    key: "cta_text",
+    label: "CTA text",
+    fallback: "Discover Our Story",
+  },
+  {
+    section: "about_section",
+    key: "cta_link",
+    label: "CTA link",
+    fallback: "/about",
+    input: "url",
+  },
+  {
+    section: "about_section",
+    key: "image",
+    label: "About image",
+    fallback: "",
+    input: "image",
+  },
+  {
+    section: "about_section",
+    key: "status",
+    label: "Status",
+    fallback: "published",
+    input: "status",
+  },
+];
+
+const CONTACT_CARD_FIELDS: ContentEditorField[] = [
+  {
+    section: "contact_card",
+    key: "company_name",
+    label: "Company name",
+    fallback: "JourneyMakers",
+  },
+  {
+    section: "contact_card",
+    key: "agent_name",
+    label: "Travel expert name",
+    fallback: "JourneyMakers",
+  },
+  {
+    section: "contact_card",
+    key: "agent_role",
+    label: "Travel expert role",
+    fallback: "Travel Expert",
+  },
+  {
+    section: "contact_card",
+    key: "whatsapp",
+    label: "WhatsApp number",
+    fallback: "+91 98765 43210",
+  },
+  {
+    section: "contact_card",
+    key: "phone",
+    label: "Phone number",
+    fallback: "+91 98765 43210",
+  },
+  {
+    section: "contact_card",
+    key: "email",
+    label: "Email address",
+    fallback: "hello@journeymakers.com",
+  },
+  {
+    section: "contact_card",
+    key: "location",
+    label: "Company location",
+    fallback: "JourneyMakers Travel Desk",
+  },
+  {
+    section: "contact_card",
+    key: "response_text",
+    label: "Response copy",
+    fallback: "Get itinerary, package details, and pricing in minutes.",
+    input: "textarea",
+  },
+  {
+    section: "contact_card",
+    key: "response_time",
+    label: "Response time",
+    fallback: "Fast response",
+  },
+  {
+    section: "contact_card",
+    key: "guidance_text",
+    label: "Guidance text",
+    fallback: "Personalized guidance",
+  },
+  {
+    section: "contact_card",
+    key: "discussion_text",
+    label: "Discussion text",
+    fallback: "Free itinerary discussion",
+  },
+  {
+    section: "contact_card",
+    key: "cta_text",
+    label: "WhatsApp CTA text",
+    fallback: "Chat on WhatsApp",
+  },
+  {
+    section: "contact_card",
+    key: "whatsapp_message",
+    label: "WhatsApp pre-filled message",
+    fallback: "Hi JourneyMakers, I want to plan a trip. Please share package details.",
+    input: "textarea",
+  },
+];
+
+function FocusedContentEditor({
+  page,
+  title,
+  subtitle,
+  previewHref,
+  fields,
+}: {
+  page: string;
+  title: string;
+  subtitle: string;
+  previewHref: string;
+  fields: ContentEditorField[];
+}) {
+  const qc = useQueryClient();
+  const { data: allContent, error } = useQuery({
+    queryKey: ["admin-content"],
+    queryFn: api.adminContent,
+  });
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+
+  function editKey(field: ContentEditorField) {
+    return `${page}.${field.section}.${field.key}`;
+  }
+
+  function storedValue(field: ContentEditorField) {
+    return allContent?.[page]?.[field.section]?.[field.key]?.value ?? field.fallback;
+  }
+
+  function valueFor(field: ContentEditorField) {
+    const key = editKey(field);
+    return key in edits ? edits[key] : storedValue(field);
+  }
+
+  function updateField(field: ContentEditorField, value: string) {
+    setEdits((prev) => ({ ...prev, [editKey(field)]: value }));
+    setSaved(false);
+    setSaveError("");
+  }
+
+  async function uploadAsset(field: ContentEditorField, file: File) {
+    const key = editKey(field);
+    setUploadingKey(key);
+    setSaveError("");
+    try {
+      const uploaded = await api.adminUploadMedia(file, `${title} ${field.label}`);
+      updateField(field, uploaded.url);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
+  async function saveChanges() {
+    const updates = Object.entries(edits).map(([key, value]) => {
+      const [updatePage, section, ...keyParts] = key.split(".");
+      return { page: updatePage, section, key: keyParts.join("."), value };
+    });
+    if (!updates.length) return;
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      await api.adminUpdateContent(updates);
+      setEdits({});
+      setSaved(true);
+      qc.invalidateQueries({ queryKey: ["admin-content"] });
+      qc.invalidateQueries({ queryKey: ["content"] });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <SessionBanner error={error as Error | null} />
+      <div className="rounded-2xl border border-border bg-[#fbf6ee] p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-accent">CMS content</p>
+            <h2 className="mt-1 text-2xl font-black">{title}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{subtitle}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {Object.keys(edits).length > 0 && (
+              <span className="text-xs font-bold text-muted-foreground">
+                {Object.keys(edits).length} unsaved
+              </span>
+            )}
+            {saved && <span className="text-xs font-black text-emerald-700">Saved</span>}
+            <a
+              href={previewHref}
+              className="inline-flex min-h-10 items-center rounded-full border border-border bg-white px-4 text-xs font-bold"
+            >
+              Preview
+            </a>
+            <button
+              type="button"
+              onClick={saveChanges}
+              disabled={saving || Object.keys(edits).length === 0}
+              className="inline-flex min-h-10 items-center rounded-full bg-foreground px-5 text-xs font-extrabold text-background disabled:opacity-40"
+            >
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </div>
+
+        {saveError && (
+          <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+            {saveError}
+          </p>
+        )}
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {fields.map((field) => {
+            const value = valueFor(field);
+            const key = editKey(field);
+
+            if (field.input === "image") {
+              return (
+                <div key={key} className="md:col-span-2">
+                  <ServiceAssetUpload
+                    label={field.label}
+                    url={value}
+                    onUpload={(file) => void uploadAsset(field, file)}
+                    onRemove={() => updateField(field, "")}
+                  />
+                  <input
+                    value={value}
+                    onChange={(e) => updateField(field, e.target.value)}
+                    className="mt-3 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                    placeholder="/assets/about.jpg or https://..."
+                  />
+                  {uploadingKey === key && (
+                    <p className="mt-2 text-xs font-bold text-accent">Uploading image...</p>
+                  )}
+                </div>
+              );
+            }
+
+            if (field.input === "status") {
+              return (
+                <label key={key} className="text-sm font-bold">
+                  {field.label}
+                  <select
+                    value={value}
+                    onChange={(e) => updateField(field, e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm capitalize"
+                  >
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </label>
+              );
+            }
+
+            if (field.input === "textarea") {
+              return (
+                <AdminTextarea
+                  key={key}
+                  label={field.label}
+                  value={value}
+                  onChange={(next) => updateField(field, next)}
+                  className="md:col-span-2"
+                />
+              );
+            }
+
+            return (
+              <AdminTextInput
+                key={key}
+                label={field.label}
+                value={value}
+                onChange={(next) => updateField(field, next)}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AboutSectionEditor() {
+  return (
+    <FocusedContentEditor
+      page="home"
+      title="About Section Management"
+      subtitle="Edit the What We Do hero card and the homepage About section from one place."
+      previewHref="/"
+      fields={ABOUT_SECTION_FIELDS}
+    />
+  );
+}
+
+function ContactTab() {
+  return (
+    <FocusedContentEditor
+      page="contact"
+      title="Contact Management"
+      subtitle="Edit the Talk to a Travel Expert hero card and Contact page contact details."
+      previewHref="/contact"
+      fields={CONTACT_CARD_FIELDS}
+    />
+  );
+}
+
+// ── Content tab — About / FAQs / Testimonials / Site Stats ───────────────────
 
 function ContentTab() {
-  const [section, setSection] = useState<"services" | "faqs" | "testimonials" | "stats">(
-    "services",
-  );
+  const [section, setSection] = useState<"about" | "faqs" | "testimonials" | "stats">("about");
   const qc = useQueryClient();
 
   // ── Bulk import state ──
@@ -3542,22 +4690,6 @@ function ContentTab() {
       setImportStatus({ kind, imported: 0, errors: [{ row: 0, message: String(err) }] });
     }
   }
-
-  // ── Services ────────────────────────────────────────────────────────────────
-  const servicesQ = useQuery({ queryKey: ["services"], queryFn: api.services });
-  const [editSvc, setEditSvc] = useState<Partial<ApiService> | null>(null);
-  const updateSvc = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<ApiService> }) =>
-      api.updateService(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["services"] });
-      setEditSvc(null);
-    },
-  });
-  const deleteSvc = useMutation({
-    mutationFn: (id: string) => api.deleteService(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["services"] }),
-  });
 
   // ── FAQs ────────────────────────────────────────────────────────────────────
   const faqsQ = useQuery({ queryKey: ["faqs"], queryFn: api.faqs });
@@ -3594,17 +4726,9 @@ function ContentTab() {
   });
 
   // ── Bulk select (after queries so data is available) ──
-  const svcBulk = useBulkSelect(servicesQ.data ?? [], (s) => s.id);
   const faqBulk = useBulkSelect(faqsQ.data ?? [], (f) => String(f.id));
   const testBulk = useBulkSelect(testimonialsQ.data ?? [], (t) => String(t.id));
 
-  const bulkDeleteSvcs = useMutation({
-    mutationFn: (ids: string[]) => api.adminBulkDelete("services", ids),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["services"] });
-      svcBulk.clearSelection();
-    },
-  });
   const bulkDeleteFaqs = useMutation({
     mutationFn: (ids: string[]) => api.adminBulkDelete("faqs", ids),
     onSuccess: () => {
@@ -3647,7 +4771,7 @@ function ContentTab() {
   });
 
   const sectionTabs: { key: typeof section; label: string }[] = [
-    { key: "services", label: "Services" },
+    { key: "about", label: "About Section" },
     { key: "faqs", label: "FAQs" },
     { key: "testimonials", label: "Testimonials" },
     { key: "stats", label: "Site Stats" },
@@ -3655,8 +4779,6 @@ function ContentTab() {
 
   return (
     <div className="space-y-8">
-      <SessionBanner error={servicesQ.error as Error | null} />
-
       {/* Import result banner */}
       {importStatus && (
         <div
@@ -3706,164 +4828,7 @@ function ContentTab() {
         ))}
       </div>
 
-      {/* ── Services ── */}
-      {section === "services" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">Services ({servicesQ.data?.length ?? 0})</h3>
-            <div className="flex gap-2">
-              <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary">
-                <Upload className="size-3" /> Import CSV
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) {
-                      handleImport("services", f);
-                      e.target.value = "";
-                    }
-                  }}
-                />
-              </label>
-              <button
-                onClick={() => api.adminExportCsv("services")}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary"
-              >
-                <Download className="size-3" /> Export CSV
-              </button>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Edit rating, description, and highlight copy for each service. These appear on the
-            homepage and Services page.
-          </p>
-          <BulkBar count={svcBulk.selected.size} onClear={svcBulk.clearSelection}>
-            <button
-              type="button"
-              disabled={bulkDeleteSvcs.isPending}
-              onClick={() => bulkDeleteSvcs.mutate(Array.from(svcBulk.selected))}
-              className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
-            >
-              <Trash2 className="size-3" /> Delete selected
-            </button>
-          </BulkBar>
-          <div className="grid gap-3">
-            {servicesQ.data?.map((s) =>
-              editSvc?.id === s.id ? (
-                <div key={s.id} className="border border-accent rounded-xl p-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold uppercase text-muted-foreground">
-                        Name
-                      </label>
-                      <input
-                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                        value={editSvc.name ?? ""}
-                        onChange={(e) => setEditSvc((v) => ({ ...v!, name: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold uppercase text-muted-foreground">
-                        Rating
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="5"
-                        step="0.1"
-                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                        value={editSvc.rating ?? 5}
-                        onChange={(e) =>
-                          setEditSvc((v) => ({ ...v!, rating: parseFloat(e.target.value) }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold uppercase text-muted-foreground">
-                      Description
-                    </label>
-                    <textarea
-                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      rows={2}
-                      value={editSvc.description ?? ""}
-                      onChange={(e) => setEditSvc((v) => ({ ...v!, description: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold uppercase text-muted-foreground">
-                      Highlight quote
-                    </label>
-                    <input
-                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                      value={editSvc.highlight ?? ""}
-                      onChange={(e) => setEditSvc((v) => ({ ...v!, highlight: e.target.value }))}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() =>
-                        updateSvc.mutate({
-                          id: s.id,
-                          data: {
-                            name: editSvc.name,
-                            description: editSvc.description,
-                            rating: editSvc.rating,
-                            highlight: editSvc.highlight,
-                          },
-                        })
-                      }
-                      className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setEditSvc(null)}
-                      className="rounded-full border border-border px-4 py-2 text-xs font-bold"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={s.id}
-                  onClick={() => svcBulk.toggleOne(s.id)}
-                  className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${svcBulk.selected.has(s.id) ? "border-accent bg-accent/5" : "border-border hover:bg-secondary/30"}`}
-                >
-                  <RowCheck
-                    checked={svcBulk.selected.has(s.id)}
-                    onToggle={() => svcBulk.toggleOne(s.id)}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold">{s.name}</div>
-                    <div className="text-sm text-muted-foreground mt-1">{s.description}</div>
-                    <div className="text-xs text-accent mt-1">
-                      ★ {s.rating.toFixed(1)} · {s.review_count} reviews · "{s.highlight}"
-                    </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => setEditSvc({ ...s })}
-                      className="rounded-full border border-border p-2 hover:bg-secondary"
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => deleteSvc.mutate(s.id)}
-                      className="rounded-full border border-red-200 p-2 text-red-500 hover:bg-red-50"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-        </div>
-      )}
+      {section === "about" && <AboutSectionEditor />}
 
       {/* ── FAQs ── */}
       {section === "faqs" && (
@@ -4211,7 +5176,7 @@ function ContentTab() {
               name="services.csv"
               kind="services"
               cols="id, name, description, rating, review_count, highlight, sort_order"
-              sample="visa-concierge,Visa Concierge,End-to-end filing.,4.9,320,Zero rejections in 2024,1"
+              sample="visa-assistance,Visa Guidance & Partner Assistance,Document checklist guidance.,4.8,320,Clear guidance without approval guarantees.,1"
             />
             <CsvCard
               name="faqs.csv"
@@ -4804,45 +5769,6 @@ function PagesTab() {
     global: "Global / Brand",
   };
 
-  const CONTACT_CARD_FIELDS = [
-    {
-      section: "contact_card",
-      key: "company_name",
-      label: "Company name",
-      fallback: "JourneyMakers",
-    },
-    {
-      section: "contact_card",
-      key: "agent_name",
-      label: "Agent name",
-      fallback: "Sonia Mehra",
-    },
-    {
-      section: "contact_card",
-      key: "agent_role",
-      label: "Agent role",
-      fallback: "Senior Travel Expert",
-    },
-    {
-      section: "contact_card",
-      key: "phone",
-      label: "Display phone",
-      fallback: "+1 (555) 123-4567",
-    },
-    {
-      section: "contact_card",
-      key: "whatsapp",
-      label: "WhatsApp number",
-      fallback: "15551234567",
-    },
-    {
-      section: "contact_card",
-      key: "location",
-      label: "Company location",
-      fallback: "JourneyMakers Travel Desk, New York, USA",
-    },
-  ];
-
   return (
     <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
       {/* Page list */}
@@ -4892,7 +5818,7 @@ function PagesTab() {
         </div>
 
         <div className="grid gap-8">
-          {activePage === "footer" && (
+          {activePage === "contact" && (
             <div className="rounded-2xl border border-accent/30 bg-accent/5 p-5">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
@@ -4900,7 +5826,7 @@ function PagesTab() {
                     Contact card
                   </p>
                   <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                    These values appear when users open any WhatsApp/contact icon.
+                    These values power the hero contact card and Contact page details.
                   </p>
                 </div>
                 <button
@@ -4927,12 +5853,21 @@ function PagesTab() {
                       <label className="mb-1.5 block text-xs font-bold text-foreground/70">
                         {field.label}
                       </label>
-                      <input
-                        type="text"
-                        value={current}
-                        onChange={(e) => handleChange(field.section, field.key, e.target.value)}
-                        className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-foreground"
-                      />
+                      {field.input === "textarea" ? (
+                        <textarea
+                          rows={3}
+                          value={current}
+                          onChange={(e) => handleChange(field.section, field.key, e.target.value)}
+                          className="w-full resize-y rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-foreground"
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={current}
+                          onChange={(e) => handleChange(field.section, field.key, e.target.value)}
+                          className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-foreground"
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -4940,49 +5875,51 @@ function PagesTab() {
             </div>
           )}
 
-          {Object.entries(pageData).map(([section, fields]) => (
-            <div key={section} className="rounded-2xl border border-border p-5">
-              <p className="mb-4 text-xs font-extrabold uppercase tracking-widest text-muted-foreground">
-                {section.replace(/_/g, " ")}
-              </p>
-              <div className="grid gap-4">
-                {Object.entries(
-                  fields as Record<
-                    string,
-                    { value: string; label: string; value_type: string; sort_order: number }
-                  >,
-                )
-                  .sort((a, b) => (a[1].sort_order ?? 0) - (b[1].sort_order ?? 0))
-                  .map(([key, meta]) => (
-                    <div key={key}>
-                      <label className="mb-1.5 block text-xs font-bold text-foreground/70">
-                        {meta.label || key}
-                      </label>
-                      {meta.value_type === "text" &&
-                      (getValue(section, key).length > 80 ||
-                        key.includes("body") ||
-                        key.includes("description") ||
-                        key.includes("tagline") ||
-                        key.includes("subtitle")) ? (
-                        <textarea
-                          rows={3}
-                          value={getValue(section, key)}
-                          onChange={(e) => handleChange(section, key, e.target.value)}
-                          className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground resize-y"
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={getValue(section, key)}
-                          onChange={(e) => handleChange(section, key, e.target.value)}
-                          className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground"
-                        />
-                      )}
-                    </div>
-                  ))}
+          {Object.entries(pageData)
+            .filter(([section]) => !(activePage === "contact" && section === "contact_card"))
+            .map(([section, fields]) => (
+              <div key={section} className="rounded-2xl border border-border p-5">
+                <p className="mb-4 text-xs font-extrabold uppercase tracking-widest text-muted-foreground">
+                  {section.replace(/_/g, " ")}
+                </p>
+                <div className="grid gap-4">
+                  {Object.entries(
+                    fields as Record<
+                      string,
+                      { value: string; label: string; value_type: string; sort_order: number }
+                    >,
+                  )
+                    .sort((a, b) => (a[1].sort_order ?? 0) - (b[1].sort_order ?? 0))
+                    .map(([key, meta]) => (
+                      <div key={key}>
+                        <label className="mb-1.5 block text-xs font-bold text-foreground/70">
+                          {meta.label || key}
+                        </label>
+                        {meta.value_type === "text" &&
+                        (getValue(section, key).length > 80 ||
+                          key.includes("body") ||
+                          key.includes("description") ||
+                          key.includes("tagline") ||
+                          key.includes("subtitle")) ? (
+                          <textarea
+                            rows={3}
+                            value={getValue(section, key)}
+                            onChange={(e) => handleChange(section, key, e.target.value)}
+                            className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground resize-y"
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={getValue(section, key)}
+                            onChange={(e) => handleChange(section, key, e.target.value)}
+                            className="w-full rounded-xl border border-border bg-secondary/30 px-4 py-2.5 text-sm outline-none focus:border-foreground"
+                          />
+                        )}
+                      </div>
+                    ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     </div>

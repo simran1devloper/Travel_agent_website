@@ -30,19 +30,29 @@ export function SiteNav() {
       className={`sticky top-0 z-50 w-full border-b px-4 py-3 transition-all duration-300 md:px-6 ${
         scrolled
           ? "border-border bg-[#f7f4ef]/92 shadow-[0_16px_50px_rgba(14,23,38,0.08)] backdrop-blur-2xl"
-          : "border-border/70 bg-[#f7f4ef]/88 backdrop-blur-xl"
+          : "border-white/10 bg-[#05080c]/96 text-white backdrop-blur-xl"
       }`}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-4">
         <Link to="/" className="group flex items-center gap-3 rounded-full focus-ring">
-          <div className="grid size-11 place-items-center rounded-full bg-[#070a0e] text-[11px] font-black text-white transition-transform group-hover:scale-105">
+          <div
+            className={`grid size-11 place-items-center rounded-full text-[11px] font-black transition-transform group-hover:scale-105 ${
+              scrolled
+                ? "bg-[#070a0e] text-white"
+                : "border border-[#ef7d2a] bg-transparent text-white"
+            }`}
+          >
             JM
           </div>
           <span className="flex flex-col leading-none">
             <span className="text-base font-extrabold uppercase tracking-normal md:text-lg">
               JourneyMakers
             </span>
-            <span className="mt-1 hidden text-sm font-semibold normal-case text-foreground/72 sm:block">
+            <span
+              className={`mt-1 hidden text-sm font-semibold normal-case sm:block ${
+                scrolled ? "text-foreground/72" : "text-white/62"
+              }`}
+            >
               Crafting unforgettable journeys
             </span>
           </span>
@@ -53,9 +63,15 @@ export function SiteNav() {
             <Link
               key={l.to}
               to={l.to}
-              className="rounded-full px-4 py-2 text-foreground/70 transition-colors hover:bg-white/70 hover:text-foreground focus-ring"
+              className={`rounded-full px-4 py-2 transition-colors focus-ring ${
+                scrolled
+                  ? "text-foreground/70 hover:bg-white/70 hover:text-foreground"
+                  : "text-white/76 hover:bg-white/8 hover:text-white"
+              }`}
               activeProps={{
-                className: "bg-white text-foreground shadow-[0_8px_24px_rgba(14,23,38,0.1)]",
+                className: scrolled
+                  ? "bg-white text-foreground shadow-[0_8px_24px_rgba(14,23,38,0.1)]"
+                  : "bg-transparent text-white shadow-none underline decoration-[#ef7d2a] decoration-2 underline-offset-[10px]",
               }}
             >
               {l.label}
@@ -67,7 +83,7 @@ export function SiteNav() {
           <UserMenu />
           <Link
             to="/booking"
-            className="group inline-flex items-center gap-2 rounded-full bg-[#070a0e] px-5 py-3 text-xs font-extrabold uppercase tracking-normal text-white shadow-[0_14px_36px_rgba(14,23,38,0.18)] transition-all hover:-translate-y-0.5 hover:bg-accent hover:shadow-[0_16px_42px_rgba(199,107,47,0.28)] focus-ring"
+            className="group inline-flex items-center gap-2 rounded-full bg-[#e66f1f] px-5 py-3 text-xs font-extrabold uppercase tracking-normal text-white shadow-[0_14px_36px_rgba(230,111,31,0.24)] transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_16px_42px_rgba(199,107,47,0.28)] focus-ring"
           >
             Inquire Now{" "}
             <ArrowUpRight className="size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

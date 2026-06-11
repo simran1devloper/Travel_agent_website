@@ -168,20 +168,48 @@ class GalleryItem(BaseModel):
 class ServiceCreate(BaseModel):
     id: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
     name: str = Field(min_length=2, max_length=120)
+    category: str = ""
+    short_description: str = ""
     description: str = ""
+    detailed_description: str = ""
+    image_url: str = ""
+    icon_url: str = ""
+    image_alt: str = ""
     rating: float = Field(default=5.0, ge=0, le=5)
     review_count: int = Field(default=0, ge=0)
     highlight: str = ""
+    badge_text: str = ""
+    cta_text: str = "Explore"
+    cta_link: str = "/services"
+    show_homepage: bool = True
+    show_services_page: bool = True
+    show_hero_card: bool = False
+    show_footer: bool = False
+    status: Literal["published", "draft", "hidden"] = "published"
     gallery: list[GalleryItem] = []
     sort_order: int = 0
 
 
 class ServiceUpdate(BaseModel):
     name: str | None = None
+    category: str | None = None
+    short_description: str | None = None
     description: str | None = None
+    detailed_description: str | None = None
+    image_url: str | None = None
+    icon_url: str | None = None
+    image_alt: str | None = None
     rating: float | None = Field(default=None, ge=0, le=5)
     review_count: int | None = Field(default=None, ge=0)
     highlight: str | None = None
+    badge_text: str | None = None
+    cta_text: str | None = None
+    cta_link: str | None = None
+    show_homepage: bool | None = None
+    show_services_page: bool | None = None
+    show_hero_card: bool | None = None
+    show_footer: bool | None = None
+    status: Literal["published", "draft", "hidden"] | None = None
     gallery: list[GalleryItem] | None = None
     sort_order: int | None = None
 

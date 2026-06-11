@@ -89,9 +89,9 @@ _TEMPLATES: dict[str, tuple[list[str], list[str]]] = {
             "review_count", "highlight", "sort_order",
         ],
         [
-            "visa-concierge", "Visa Concierge",
-            "End-to-end visa filing with guaranteed turnaround.",
-            "4.9", "320", "Zero rejections in 2024", "1",
+            "visa-assistance", "Visa Guidance & Partner Assistance",
+            "Document checklist guidance and trusted third-party partner assistance when needed.",
+            "4.8", "320", "Clear guidance without approval guarantees.", "1",
         ],
     ),
     "faqs": (

@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         name: "description",
         content:
-          "Bespoke travel journeys, visa concierge, and end-to-end trip planning across 124+ destinations.",
+          "Bespoke travel journeys, visa guidance, and end-to-end trip planning across 124+ destinations.",
       },
       { name: "author", content: "JourneyMakers" },
       { property: "og:site_name", content: "JourneyMakers" },
@@ -88,12 +88,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         property: "og:description",
         content:
-          "Bespoke travel journeys, visa concierge, and end-to-end trip planning across 124+ destinations.",
+          "Bespoke travel journeys, visa guidance, and end-to-end trip planning across 124+ destinations.",
       },
       {
         name: "twitter:description",
         content:
-          "Bespoke travel journeys, visa concierge, and end-to-end trip planning across 124+ destinations.",
+          "Bespoke travel journeys, visa guidance, and end-to-end trip planning across 124+ destinations.",
       },
     ],
     links: [

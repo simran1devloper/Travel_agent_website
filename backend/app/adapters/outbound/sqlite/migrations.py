@@ -160,10 +160,24 @@ CREATE TABLE IF NOT EXISTS memories (
 CREATE TABLE IF NOT EXISTS services (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT '',
+  short_description TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
+  detailed_description TEXT NOT NULL DEFAULT '',
+  image_url TEXT NOT NULL DEFAULT '',
+  icon_url TEXT NOT NULL DEFAULT '',
+  image_alt TEXT NOT NULL DEFAULT '',
   rating REAL NOT NULL DEFAULT 5.0,
   review_count INTEGER NOT NULL DEFAULT 0,
   highlight TEXT NOT NULL DEFAULT '',
+  badge_text TEXT NOT NULL DEFAULT '',
+  cta_text TEXT NOT NULL DEFAULT 'Explore',
+  cta_link TEXT NOT NULL DEFAULT '/services',
+  show_homepage INTEGER NOT NULL DEFAULT 1,
+  show_services_page INTEGER NOT NULL DEFAULT 1,
+  show_hero_card INTEGER NOT NULL DEFAULT 0,
+  show_footer INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'published',
   gallery TEXT NOT NULL DEFAULT '[]',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
@@ -248,6 +262,20 @@ _ALTERS = [
     "ALTER TABLE reviews ADD COLUMN helpful_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE reviews ADD COLUMN admin_reply TEXT",
     "ALTER TABLE reviews ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE services ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN short_description TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN detailed_description TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN image_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN icon_url TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN image_alt TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN badge_text TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE services ADD COLUMN cta_text TEXT NOT NULL DEFAULT 'Explore'",
+    "ALTER TABLE services ADD COLUMN cta_link TEXT NOT NULL DEFAULT '/services'",
+    "ALTER TABLE services ADD COLUMN show_homepage INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE services ADD COLUMN show_services_page INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE services ADD COLUMN show_hero_card INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE services ADD COLUMN show_footer INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE services ADD COLUMN status TEXT NOT NULL DEFAULT 'published'",
 ]
 
 _INDEXES = [
@@ -277,6 +305,8 @@ def migrate(db: SQLiteDatabase) -> None:
             except Exception:
                 pass
         _seed(conn)
+        _patch_content_defaults(conn)
+        _patch_service_content(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -342,22 +372,22 @@ def _seed(conn: sqlite3.Connection) -> None:
 
     if conn.execute("SELECT COUNT(*) FROM services").fetchone()[0] == 0:
         services_seed = [
-            ("tour-packages", "Curated Tour Packages", "Hand-crafted itineraries across 124+ destinations.", 4.9, 512, "They crafted the exact pace I needed — effortless and luxurious.", 0),
-            ("visa-assistance", "Visa Concierge", "Expedited filings, white-glove documentation handling.", 4.8, 441, "The team handled my urgent paperwork while I focused on the trip.", 1),
-            ("hotel-booking", "Luxury Hotel Booking", "Negotiated rates at the world's best properties.", 4.9, 378, "Every stay felt upgraded, from arrival to late checkout.", 2),
-            ("flight-booking", "Flight Booking", "Business & first-class fares, multi-city routing.", 4.8, 398, "They found the perfect routing with minimal layovers.", 3),
-            ("corporate-tours", "Corporate Retreats", "Off-sites that change company culture.", 4.7, 259, "Our team returned with stronger bonds and zero logistics headaches.", 4),
-            ("group-tours", "Group Tours", "Small private groups, never bus-tour scale.", 4.8, 311, "The group experience felt intimate and perfectly timed.", 5),
-            ("honeymoon", "Honeymoon Packages", "Stories that begin a marriage.", 4.9, 287, "Attention to detail made every moment feel special.", 6),
-            ("adventure", "Adventure Expeditions", "Sahara, Patagonia, Himalayas — properly equipped.", 4.8, 330, "The guides knew every ridge, trail, and local story.", 7),
-            ("international", "International Travel", "Global routing handled end-to-end.", 4.8, 364, "We felt supported in every timezone.", 8),
-            ("domestic", "Domestic Travel", "Hidden corners of home, beautifully arranged.", 4.7, 225, "Domestic escapes felt as polished as overseas journeys.", 9),
-            ("passport", "Passport Assistance", "Renewals, expediting, lost-passport recovery.", 4.9, 402, "They resolved my embassy appointments with ease.", 10),
-            ("custom-trip", "Custom Trip Planning", "From a single line of brief to a finished journey.", 4.9, 487, "Every detail matched our request better than expected.", 11),
+            ("tour-packages", "Curated Tour Packages", "Planning", "Hand-crafted itineraries across 124+ destinations.", "Hand-crafted itineraries across 124+ destinations.", 4.9, 512, "They crafted the exact pace I needed — effortless and luxurious.", "Popular", "Explore", "/services", 1, 1, 1, 1, "published", 0),
+            ("visa-assistance", "Visa Guidance & Partner Assistance", "Travel documents", "Basic travel guidance, document checklist help, and trusted third-party visa assistance partner connections when needed.", "JourneyMakers provides basic travel guidance, document checklist help, and can connect travelers with trusted third-party visa assistance partners when needed. Visa approval depends on embassy/consulate rules and applicant documents. JourneyMakers does not guarantee visa approval.", 4.8, 441, "Clear document guidance and partner assistance without false approval guarantees.", "Recommended", "Get Guidance", "/contact", 1, 1, 1, 1, "published", 1),
+            ("hotel-booking", "Luxury Hotel Booking", "Bookings", "Negotiated rates at the world's best properties.", "Negotiated rates at the world's best properties.", 4.9, 378, "Every stay felt upgraded, from arrival to late checkout.", "Most Trusted", "Explore", "/services", 1, 1, 0, 1, "published", 2),
+            ("flight-booking", "Flight Booking", "Bookings", "Business & first-class fares, multi-city routing.", "Business & first-class fares, multi-city routing.", 4.8, 398, "They found the perfect routing with minimal layovers.", "", "Explore", "/services", 1, 1, 0, 0, "published", 3),
+            ("corporate-tours", "Corporate Retreats", "Corporate", "Off-sites that change company culture.", "Off-sites that change company culture.", 4.7, 259, "Our team returned with stronger bonds and zero logistics headaches.", "", "Explore", "/services", 1, 1, 0, 0, "published", 4),
+            ("group-tours", "Group Tours", "Groups", "Small private groups, never bus-tour scale.", "Small private groups, never bus-tour scale.", 4.8, 311, "The group experience felt intimate and perfectly timed.", "", "Explore", "/services", 1, 1, 0, 0, "published", 5),
+            ("honeymoon", "Honeymoon Packages", "Special occasions", "Stories that begin a marriage.", "Stories that begin a marriage.", 4.9, 287, "Attention to detail made every moment feel special.", "Popular", "Plan My Trip", "/contact", 1, 1, 0, 0, "published", 6),
+            ("adventure", "Adventure Expeditions", "Adventure", "Sahara, Patagonia, Himalayas — properly equipped.", "Sahara, Patagonia, Himalayas — properly equipped.", 4.8, 330, "The guides knew every ridge, trail, and local story.", "", "Explore", "/services", 1, 1, 0, 0, "published", 7),
+            ("international", "International Travel", "International", "Global routing handled end-to-end.", "Global routing handled end-to-end.", 4.8, 364, "We felt supported in every timezone.", "", "Explore", "/services", 1, 1, 1, 1, "published", 8),
+            ("domestic", "Domestic Travel", "Domestic", "Hidden corners of home, beautifully arranged.", "Hidden corners of home, beautifully arranged.", 4.7, 225, "Domestic escapes felt as polished as overseas journeys.", "", "Explore", "/services", 1, 1, 0, 0, "published", 9),
+            ("passport", "Passport Assistance", "Travel documents", "Document guidance and appointment preparation support.", "Document guidance and appointment preparation support.", 4.9, 402, "They helped us understand the steps and required documents.", "", "Get Guidance", "/contact", 1, 1, 0, 0, "published", 10),
+            ("custom-trip", "Custom Trip Planning", "Planning", "From a single line of brief to a finished journey.", "From a single line of brief to a finished journey.", 4.9, 487, "Every detail matched our request better than expected.", "Recommended", "Plan My Trip", "/contact", 1, 1, 1, 1, "published", 11),
         ]
         conn.executemany(
-            """INSERT INTO services (id, name, description, rating, review_count, highlight, gallery, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)""",
+            """INSERT INTO services (id, name, category, short_description, description, rating, review_count, highlight, badge_text, cta_text, cta_link, show_homepage, show_services_page, show_hero_card, show_footer, status, gallery, sort_order, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)""",
             [(*s, now, now) for s in services_seed],
         )
 
@@ -439,6 +469,20 @@ def _seed(conn: sqlite3.Connection) -> None:
             ("home", "hero", "cta_secondary", "View Journeys", "text", "Secondary CTA label", 6),
             ("home", "hero", "cta_secondary_url", "/packages", "url", "Secondary CTA URL", 7),
             ("home", "hero", "video_url", "", "url", "Hero background video URL", 8),
+
+            ("home", "about_section", "label", "About JourneyMakers", "text", "About section label", 0),
+            ("home", "about_section", "heading", "We plan journeys that feel personal, smooth, and memorable.", "text", "About main heading", 1),
+            ("home", "about_section", "short_description", "JourneyMakers helps travelers plan smooth, personalized, and memorable trips. We exist to make travel easier and stress-free by handling destination planning, packages, hotels, flights, transfers, and on-trip support.", "text", "Short about description used in hero card", 2),
+            ("home", "about_section", "detailed_description", "JourneyMakers helps travelers plan customized trips across India and international destinations. From itinerary planning and hotel bookings to flights, transfers, sightseeing, honeymoon packages, family tours, group travel, and corporate retreats, we handle every detail with care and expert support.", "text", "Detailed about description used in homepage section", 3),
+            ("home", "about_section", "purpose", "We make travel easier, more meaningful, and stress-free.", "text", "Company purpose", 4),
+            ("home", "about_section", "highlight_1", "Personalized trip planning", "text", "Highlight 1", 5),
+            ("home", "about_section", "highlight_2", "End-to-end support", "text", "Highlight 2", 6),
+            ("home", "about_section", "highlight_3", "For couples, families, groups, and corporate travelers", "text", "Highlight 3", 7),
+            ("home", "about_section", "highlight_4", "Crafted journeys, not generic packages", "text", "Highlight 4", 8),
+            ("home", "about_section", "cta_text", "Discover Our Story", "text", "About CTA text", 9),
+            ("home", "about_section", "cta_link", "/about", "url", "About CTA link", 10),
+            ("home", "about_section", "image", "", "url", "About image URL", 11),
+            ("home", "about_section", "status", "published", "text", "Published / Draft / Hidden", 12),
 
             ("home", "cinematic_moment", "badge", "Cinematic Moment", "text", "Section badge", 0),
             ("home", "cinematic_moment", "title", "One saved memory can become the reason for the whole journey.", "text", "Main headline", 1),
@@ -560,7 +604,7 @@ def _seed(conn: sqlite3.Connection) -> None:
             # ── SERVICES PAGE ─────────────────────────────────────────────────
             ("services", "hero", "eyebrow", "Services", "text", "Eyebrow label", 0),
             ("services", "hero", "title", "Everything we orchestrate, end-to-end.", "text", "Page title", 1),
-            ("services", "hero", "body", "Visa concierge, hotel & flight booking, honeymoon packages, corporate retreats, and bespoke planning.", "text", "Hero body", 2),
+            ("services", "hero", "body", "Visa guidance, hotel & flight booking, honeymoon packages, corporate retreats, and bespoke planning.", "text", "Hero body", 2),
 
             # ── GLOBAL ────────────────────────────────────────────────────────
             ("global", "brand", "name", "JourneyMakers", "text", "Brand name used site-wide", 0),
@@ -591,3 +635,91 @@ def _seed(conn: sqlite3.Connection) -> None:
                 """,
                 (f"INQ-{index}", name, email, json_dumps([destination]), budget, status, now, now),
             )
+
+
+def _patch_service_content(conn: sqlite3.Connection) -> None:
+    visa_description = (
+        "JourneyMakers provides basic travel guidance, document checklist help, and can connect "
+        "travelers with trusted third-party visa assistance partners when needed. Visa approval "
+        "depends on embassy/consulate rules and applicant documents. JourneyMakers does not "
+        "guarantee visa approval."
+    )
+    try:
+        conn.execute(
+            """UPDATE services
+               SET name = ?,
+                   category = ?,
+                   short_description = ?,
+                   description = ?,
+                   detailed_description = ?,
+                   highlight = ?,
+                   badge_text = ?,
+                   cta_text = ?,
+                   cta_link = ?
+               WHERE id = ? OR name = ?""",
+            (
+                "Visa Guidance & Partner Assistance",
+                "Travel documents",
+                "Basic travel guidance, document checklist help, and trusted third-party visa assistance partner connections when needed.",
+                visa_description,
+                visa_description,
+                "Clear document guidance and partner assistance without false approval guarantees.",
+                "Recommended",
+                "Get Guidance",
+                "/contact",
+                "visa-assistance",
+                "Visa Concierge",
+            ),
+        )
+        conn.execute(
+            """UPDATE site_content
+               SET value = ?
+               WHERE page = 'services' AND section = 'hero' AND key = 'body'
+                 AND value LIKE '%Visa concierge%'""",
+            (
+                "Visa guidance, hotel & flight booking, honeymoon packages, corporate retreats, and bespoke planning.",
+            ),
+        )
+    except Exception:
+        pass
+
+
+def _patch_content_defaults(conn: sqlite3.Connection) -> None:
+    now = utc_now()
+    rows = [
+        ("home", "about_section", "label", "About JourneyMakers", "text", "About section label", 0),
+        ("home", "about_section", "heading", "We plan journeys that feel personal, smooth, and memorable.", "text", "About main heading", 1),
+        ("home", "about_section", "short_description", "JourneyMakers helps travelers plan smooth, personalized, and memorable trips. We exist to make travel easier and stress-free by handling destination planning, packages, hotels, flights, transfers, and on-trip support.", "text", "Short about description used in hero card", 2),
+        ("home", "about_section", "detailed_description", "JourneyMakers helps travelers plan customized trips across India and international destinations. From itinerary planning and hotel bookings to flights, transfers, sightseeing, honeymoon packages, family tours, group travel, and corporate retreats, we handle every detail with care and expert support.", "text", "Detailed about description used in homepage section", 3),
+        ("home", "about_section", "purpose", "We make travel easier, more meaningful, and stress-free.", "text", "Company purpose", 4),
+        ("home", "about_section", "highlight_1", "Personalized trip planning", "text", "Highlight 1", 5),
+        ("home", "about_section", "highlight_2", "End-to-end support", "text", "Highlight 2", 6),
+        ("home", "about_section", "highlight_3", "For couples, families, groups, and corporate travelers", "text", "Highlight 3", 7),
+        ("home", "about_section", "highlight_4", "Crafted journeys, not generic packages", "text", "Highlight 4", 8),
+        ("home", "about_section", "cta_text", "Discover Our Story", "text", "About CTA text", 9),
+        ("home", "about_section", "cta_link", "/about", "url", "About CTA link", 10),
+        ("home", "about_section", "image", "", "url", "About image URL", 11),
+        ("home", "about_section", "status", "published", "text", "Published / Draft / Hidden", 12),
+        ("contact", "contact_card", "company_name", "JourneyMakers", "text", "Company name", 0),
+        ("contact", "contact_card", "agent_name", "JourneyMakers", "text", "Travel expert name", 1),
+        ("contact", "contact_card", "agent_role", "Travel Expert", "text", "Travel expert role", 2),
+        ("contact", "contact_card", "whatsapp", "+91 98765 43210", "text", "WhatsApp number", 3),
+        ("contact", "contact_card", "phone", "+91 98765 43210", "text", "Phone number", 4),
+        ("contact", "contact_card", "email", "hello@journeymakers.com", "text", "Email address", 5),
+        ("contact", "contact_card", "location", "JourneyMakers Travel Desk", "text", "Office address / location", 6),
+        ("contact", "contact_card", "response_text", "Get itinerary, package details, and pricing in minutes.", "text", "Trust / response text", 7),
+        ("contact", "contact_card", "response_time", "Fast response", "text", "Response time text", 8),
+        ("contact", "contact_card", "guidance_text", "Personalized guidance", "text", "Guidance text", 9),
+        ("contact", "contact_card", "discussion_text", "Free itinerary discussion", "text", "Discussion text", 10),
+        ("contact", "contact_card", "cta_text", "Chat on WhatsApp", "text", "CTA text", 11),
+        ("contact", "contact_card", "whatsapp_message", "Hi JourneyMakers, I want to plan a trip. Please share package details.", "text", "WhatsApp pre-filled message", 12),
+    ]
+    try:
+        conn.executemany(
+            """INSERT OR IGNORE INTO site_content
+               (page, section, key, value, value_type, label, sort_order, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            [(*row, now) for row in rows],
+        )
+    except Exception:
+        pass

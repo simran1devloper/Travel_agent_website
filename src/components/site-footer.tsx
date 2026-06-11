@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { CreditCard, Instagram, Linkedin, Mail, ShieldCheck } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type ContentPage } from "@/lib/api";
+import { api, type ApiService, type ContentPage } from "@/lib/api";
 
 function useFooterContent() {
   const { data } = useQuery<ContentPage>({
@@ -17,6 +17,15 @@ function useFooterContent() {
 
 export function SiteFooter() {
   const { c } = useFooterContent();
+  const { data: footerServices = [] } = useQuery<ApiService[]>({
+    queryKey: ["services", "footer"],
+    queryFn: api.services,
+    staleTime: 5 * 60 * 1000,
+  });
+  const serviceLinks = footerServices
+    .filter((service) => (service.status ?? "published") === "published")
+    .filter((service) => service.show_footer === true)
+    .slice(0, 3);
   return (
     <footer className="border-t border-border bg-[#0e1726] px-6 pb-8 pt-20 text-background md:px-8">
       <div className="mx-auto mb-14 grid max-w-7xl grid-cols-1 gap-12 lg:grid-cols-[1.15fr_0.85fr]">
@@ -30,14 +39,20 @@ export function SiteFooter() {
             </span>
           </div>
           <p className="max-w-md text-base leading-8 text-background/68">
-            {c("brand", "tagline", "Building the future of high-intent travel. Every mile a memory, every journey a masterpiece.")}
+            {c(
+              "brand",
+              "tagline",
+              "Building the future of high-intent travel. Every mile a memory, every journey a masterpiece.",
+            )}
           </p>
           <div className="mt-8 grid gap-3 text-sm text-background/72 sm:grid-cols-3">
             <span className="inline-flex items-center gap-2">
-              <ShieldCheck className="size-4 text-[#d7aa73]" /> {c("brand", "trust_1", "IATA partner desk")}
+              <ShieldCheck className="size-4 text-[#d7aa73]" />{" "}
+              {c("brand", "trust_1", "IATA partner desk")}
             </span>
             <span className="inline-flex items-center gap-2">
-              <CreditCard className="size-4 text-[#d7aa73]" /> {c("brand", "trust_2", "Secure payments")}
+              <CreditCard className="size-4 text-[#d7aa73]" />{" "}
+              {c("brand", "trust_2", "Secure payments")}
             </span>
             <span className="inline-flex items-center gap-2">
               <Mail className="size-4 text-[#d7aa73]" /> {c("brand", "trust_3", "24/7 concierge")}
@@ -48,9 +63,15 @@ export function SiteFooter() {
           onSubmit={(e) => e.preventDefault()}
           className="rounded-2xl border border-white/12 bg-white/[0.06] p-6"
         >
-          <h4 className="mb-3 text-2xl font-extrabold leading-tight">{c("newsletter", "title", "Private departures, first.")}</h4>
+          <h4 className="mb-3 text-2xl font-extrabold leading-tight">
+            {c("newsletter", "title", "Private departures, first.")}
+          </h4>
           <p className="mb-6 text-sm leading-7 text-background/64">
-            {c("newsletter", "body", "Receive limited-seat journeys, visa updates, and planner notes before they reach the public calendar.")}
+            {c(
+              "newsletter",
+              "body",
+              "Receive limited-seat journeys, visa updates, and planner notes before they reach the public calendar.",
+            )}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
@@ -108,23 +129,22 @@ export function SiteFooter() {
           </ul>
         </div>
         <div>
-          <h5 className="mb-5 text-sm font-extrabold">Support</h5>
+          <h5 className="mb-5 text-sm font-extrabold">Services</h5>
           <ul className="space-y-3 text-sm text-background/64">
-            <li>
-              <Link to="/contact" className="hover:text-white">
-                Contact
-              </Link>
-            </li>
-            <li>
-              <Link to="/booking" className="hover:text-white">
-                Start an Inquiry
-              </Link>
-            </li>
-            <li>
-              <Link to="/services" className="hover:text-white">
-                Visa Help
-              </Link>
-            </li>
+            {(serviceLinks.length
+              ? serviceLinks
+              : [
+                  { id: "tour-packages", name: "Curated Tour Packages", cta_link: "/services" },
+                  { id: "visa-assistance", name: "Visa Guidance", cta_link: "/services" },
+                  { id: "custom-trip", name: "Custom Trip Planning", cta_link: "/services" },
+                ]
+            ).map((service) => (
+              <li key={service.id}>
+                <a href={service.cta_link || "/services"} className="hover:text-white">
+                  {service.name}
+                </a>
+              </li>
+            ))}
           </ul>
         </div>
         <div>

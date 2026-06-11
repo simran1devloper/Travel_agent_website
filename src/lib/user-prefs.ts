@@ -41,7 +41,7 @@ export function useRecentlyViewed() {
         return next.slice(0, MAX_RECENT);
       });
     },
-    [setItems]
+    [setItems],
   );
 
   const clear = useCallback(() => setItems([]), [setItems]);
@@ -58,11 +58,9 @@ export function useGuestWishlist() {
 
   const toggle = useCallback(
     (slug: string) => {
-      setSlugs((prev) =>
-        prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
-      );
+      setSlugs((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]));
     },
-    [setSlugs]
+    [setSlugs],
   );
 
   const has = useCallback((slug: string) => slugs.includes(slug), [slugs]);
@@ -83,7 +81,7 @@ export function useHelpfulVotes() {
     (publicId: string) => {
       setVoted((prev) => (prev.includes(publicId) ? prev : [...prev, publicId]));
     },
-    [setVoted]
+    [setVoted],
   );
 
   const hasVoted = useCallback((publicId: string) => voted.includes(publicId), [voted]);
@@ -150,7 +148,7 @@ export function useInquiryDraft() {
     (partial: Partial<InquiryDraft>) => {
       setDraft((prev) => ({ ...prev, ...partial, savedAt: Date.now() }));
     },
-    [setDraft]
+    [setDraft],
   );
 
   const resetDraft = useCallback(() => {
@@ -204,11 +202,13 @@ export function useDestinationFilterState() {
 export type AdminTabKey =
   | "overview"
   | "packages"
+  | "services"
   | "planners"
   | "content"
   | "offers"
   | "media"
   | "reviews"
+  | "contact"
   | "pages";
 
 export function useAdminTabPref() {
@@ -232,7 +232,7 @@ export function useCompareList() {
         return [...prev, slug];
       });
     },
-    [setSlugs]
+    [setSlugs],
   );
 
   const has = useCallback((slug: string) => slugs.includes(slug), [slugs]);

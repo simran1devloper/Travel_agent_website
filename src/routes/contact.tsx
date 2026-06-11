@@ -90,35 +90,85 @@ function ContactPage() {
   const featured = destinationsData[3] ?? destinationsData[0];
   const moments = destinationsData.slice(0, 3).map((destination) => ({
     destination: destination.name,
-    image: MEDIA.destinations?.[destination.slug] ?? destination.image_url ?? `https://picsum.photos/seed/${destination.slug}/800/600`,
-    caption: (destination.gallery as Array<{ caption?: string }> | undefined)?.[0]?.caption ?? destination.tagline ?? destination.name,
-    author: (destination.gallery as Array<{ author?: string }> | undefined)?.[0]?.author ?? "JourneyMakers traveler",
+    image:
+      MEDIA.destinations?.[destination.slug] ??
+      destination.image_url ??
+      `https://picsum.photos/seed/${destination.slug}/800/600`,
+    caption:
+      (destination.gallery as Array<{ caption?: string }> | undefined)?.[0]?.caption ??
+      destination.tagline ??
+      destination.name,
+    author:
+      (destination.gallery as Array<{ author?: string }> | undefined)?.[0]?.author ??
+      "JourneyMakers traveler",
   }));
 
   const cmsProof = [
-    { value: c("stats", "stat_1_value", "4.9"), label: c("stats", "stat_1_label", "average traveler rating") },
-    { value: c("stats", "stat_2_value", "2,300+"), label: c("stats", "stat_2_label", "curated journeys planned") },
-    { value: c("stats", "stat_3_value", "84"), label: c("stats", "stat_3_label", "countries explored by planners") },
+    {
+      value: c("stats", "stat_1_value", "4.9"),
+      label: c("stats", "stat_1_label", "average traveler rating"),
+    },
+    {
+      value: c("stats", "stat_2_value", "2,300+"),
+      label: c("stats", "stat_2_label", "curated journeys planned"),
+    },
+    {
+      value: c("stats", "stat_3_value", "84"),
+      label: c("stats", "stat_3_label", "countries explored by planners"),
+    },
   ];
+
+  const contactCompany = c("contact_card", "company_name", "JourneyMakers");
+  const contactAgentName = c("contact_card", "agent_name", "JourneyMakers");
+  const contactAgentRole = c("contact_card", "agent_role", "Travel Expert");
+  const contactWhatsapp = c(
+    "contact_card",
+    "whatsapp",
+    c("whatsapp", "number", "+1 (555) 123-4567"),
+  );
+  const contactPhone = c("contact_card", "phone", c("phone_contact", "action", "Schedule a call"));
+  const contactEmail = c(
+    "contact_card",
+    "email",
+    c("email_contact", "address", "concierge@journeymakers.travel"),
+  );
+  const contactResponseText = c(
+    "contact_card",
+    "response_text",
+    "Get itinerary, package details, and pricing in minutes.",
+  );
+  const contactResponseTime = c("contact_card", "response_time", "Fast response");
+  const contactInitials =
+    contactAgentName
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "JM";
 
   const cmsContactPaths = [
     {
       icon: MessageCircle,
       title: c("whatsapp", "title", "Quick questions"),
       body: c("whatsapp", "body", "WhatsApp a planner when the idea is still forming."),
-      action: c("whatsapp", "number", "+1 (555) 123-4567"),
+      action: contactWhatsapp,
     },
     {
       icon: Mail,
       title: c("email_contact", "title", "Custom itinerary"),
       body: c("email_contact", "body", "Share dates, moods, and the memories you want built in."),
-      action: c("email_contact", "address", "concierge@journeymakers.travel"),
+      action: contactEmail,
     },
     {
       icon: Phone,
       title: c("phone_contact", "title", "Private consultation"),
-      body: c("phone_contact", "body", "Book a focused call for celebrations, groups, or complex routing."),
-      action: c("phone_contact", "action", "Schedule a call"),
+      body: c(
+        "phone_contact",
+        "body",
+        "Book a focused call for celebrations, groups, or complex routing.",
+      ),
+      action: contactPhone,
     },
   ];
 
@@ -128,19 +178,31 @@ function ContactPage() {
       <main>
         <section className="relative overflow-hidden bg-[#0e1726] text-white">
           <img
-            src={featured ? (MEDIA.destinations?.[featured.slug] ?? featured.image_url ?? `https://picsum.photos/seed/${featured.slug}/800/600`) : MEDIA.heroPoster}
+            src={
+              featured
+                ? (MEDIA.destinations?.[featured.slug] ??
+                  featured.image_url ??
+                  `https://picsum.photos/seed/${featured.slug}/800/600`)
+                : MEDIA.heroPoster
+            }
             alt={featured?.name ?? "JourneyMakers"}
             className="absolute inset-0 h-full w-full object-cover opacity-72"
           />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(14,23,38,0.9),rgba(14,23,38,0.58)_48%,rgba(14,23,38,0.72)),linear-gradient(180deg,rgba(14,23,38,0.12),rgba(14,23,38,0.9))]" />
           <div className="section-shell relative grid gap-10 py-16 md:py-20 lg:grid-cols-[0.96fr_1.04fr] lg:items-end">
             <div>
-              <span className="eyebrow mb-5 text-[#d7aa73]">{c("hero", "eyebrow", "Start the conversation")}</span>
+              <span className="eyebrow mb-5 text-[#d7aa73]">
+                {c("hero", "eyebrow", "Start the conversation")}
+              </span>
               <h1 className="mb-7 max-w-4xl text-balance text-5xl font-black leading-[1.02] md:text-7xl">
                 {c("hero", "title", "Tell us the kind of moments you want to experience.")}
               </h1>
               <p className="max-w-2xl text-lg leading-9 text-white/76">
-                {c("hero", "body", "Every unforgettable journey starts as a feeling. A planner will personally respond within 24 hours and shape the first route around what you want to remember.")}
+                {c(
+                  "hero",
+                  "body",
+                  "Every unforgettable journey starts as a feeling. A planner will personally respond within 24 hours and shape the first route around what you want to remember.",
+                )}
               </p>
 
               <div className="mt-9 grid grid-cols-3 gap-3 max-sm:grid-cols-1">
@@ -171,23 +233,30 @@ function ContactPage() {
             <div className="premium-card rounded-2xl p-6 md:p-7">
               <div className="mb-5 flex items-center gap-4">
                 <div className="grid size-14 place-items-center rounded-full bg-[#0e1726] text-base font-black text-white">
-                  M
+                  {contactInitials}
                 </div>
                 <div>
-                  <div className="text-lg font-extrabold">Maya Rao</div>
+                  <div className="text-lg font-extrabold">{contactAgentName}</div>
                   <div className="text-sm font-semibold text-muted-foreground">
-                    Asia journeys specialist
+                    {contactAgentRole}
                   </div>
                 </div>
               </div>
               <Quote className="mb-4 size-7 text-accent" />
               <p className="mb-5 text-xl font-semibold leading-9 text-foreground">
-                "{c("hero", "quote", "We believe the best itineraries are built around memories, not checklists.")}"
+                "
+                {c(
+                  "hero",
+                  "quote",
+                  "We believe the best itineraries are built around memories, not checklists.",
+                )}
+                "
               </p>
               <div className="flex items-center gap-2 text-sm font-bold text-[#8a6144]">
                 <Star className="size-4 fill-[#d7aa73] text-[#d7aa73]" />
-                Usually replies within 6 hours
+                {contactCompany} · {contactResponseTime}
               </div>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">{contactResponseText}</p>
             </div>
 
             <div className="grid gap-4">

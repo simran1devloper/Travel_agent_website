@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -717,6 +717,30 @@ function DestinationStoryCard({
       : fallbackMoments;
   const [activeMoment, setActiveMoment] = useState<number | null>(null);
   const topMoments = places.flatMap((place) => place.topMoments).slice(0, 3);
+  const router = useRouter();
+
+  function isInteractiveTarget(target: EventTarget | null) {
+    return target instanceof HTMLElement
+      ? target.closest('a, button, input, select, textarea, [role="button"]') !== null
+      : false;
+  }
+
+  function openContactPage() {
+    void router.navigate({ to: "/contact" });
+  }
+
+  function handleCardClick(event: React.MouseEvent<HTMLElement>) {
+    if (isInteractiveTarget(event.target)) return;
+    openContactPage();
+  }
+
+  function handleCardKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (isInteractiveTarget(event.target)) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openContactPage();
+    }
+  }
 
   // Track recently viewed packages in localStorage
   const { push: pushRecent } = useRecentlyViewed();
@@ -738,7 +762,12 @@ function DestinationStoryCard({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-90px" }}
       transition={{ duration: 0.65, delay: Math.min(index * 0.05, 0.16) }}
-      className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_28px_80px_rgba(23,23,23,0.08)]"
+      role="link"
+      tabIndex={0}
+      aria-label={`Contact JourneyMakers about ${packageItem.title}`}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
+      className="cursor-pointer overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_28px_80px_rgba(23,23,23,0.08)] focus-ring"
     >
       <div className="relative min-h-[380px] overflow-hidden md:min-h-[520px]">
         <img

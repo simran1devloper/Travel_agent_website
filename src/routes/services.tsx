@@ -58,11 +58,23 @@ const fallbackServices: ApiService[] = [
   },
   {
     id: "visa-assistance",
-    name: "Visa Concierge",
-    description: "Expedited filings, white-glove documentation handling.",
+    name: "Visa Guidance & Partner Assistance",
+    category: "Travel documents",
+    short_description:
+      "Basic travel guidance, document checklist help, and trusted third-party visa assistance partner connections when needed.",
+    description:
+      "JourneyMakers provides basic travel guidance, document checklist help, and can connect travelers with trusted third-party visa assistance partners when needed. Visa approval depends on embassy/consulate rules and applicant documents. JourneyMakers does not guarantee visa approval.",
     rating: 4.8,
     review_count: 441,
-    highlight: "The team handled my urgent paperwork while I focused on the trip.",
+    highlight: "Clear document guidance and partner assistance without false approval guarantees.",
+    badge_text: "Recommended",
+    cta_text: "Get Guidance",
+    cta_link: "/contact",
+    status: "published",
+    show_homepage: true,
+    show_services_page: true,
+    show_hero_card: true,
+    show_footer: true,
     gallery: [],
     sort_order: 2,
   },
@@ -227,7 +239,9 @@ function ServicesPage() {
     queryFn: api.services,
   });
 
-  const services = servicesQuery.data?.length ? servicesQuery.data : fallbackServices;
+  const services = (servicesQuery.data?.length ? servicesQuery.data : fallbackServices)
+    .filter((service) => (service.status ?? "published") === "published")
+    .filter((service) => service.show_services_page !== false);
 
   return (
     <>
@@ -353,7 +367,7 @@ function ServiceGridSkeleton() {
 function ServiceCard({ service, index }: { service: ApiService; index: number }) {
   const isLight = lightCards.has(service.id);
   const image =
-    serviceImages[service.id] ??
+    (service.image_url || serviceImages[service.id]) ??
     service.gallery?.find((item) => item.type === "photo")?.src ??
     fallbackImages[index % fallbackImages.length];
   const layout = cardLayouts[index % cardLayouts.length];
@@ -379,9 +393,9 @@ function ServiceCard({ service, index }: { service: ApiService; index: number })
         }`}
       />
 
-      {index === 1 && (
+      {(service.badge_text || index === 1) && (
         <span className="absolute left-5 top-4 rounded-full bg-[#e36f2c] px-3 py-1 text-[10px] font-extrabold uppercase text-white">
-          Most trusted
+          {service.badge_text || "Most trusted"}
         </span>
       )}
 
@@ -404,7 +418,7 @@ function ServiceCard({ service, index }: { service: ApiService; index: number })
         <p
           className={`mt-4 max-w-sm text-sm font-semibold leading-6 ${isLight ? "text-[#3f4650]" : "text-white/84"}`}
         >
-          {service.description}
+          {service.short_description || service.description}
         </p>
         <p
           className={`mt-4 max-w-sm text-xs italic leading-5 ${isLight ? "text-[#59606a]" : "text-white/76"}`}
@@ -413,14 +427,14 @@ function ServiceCard({ service, index }: { service: ApiService; index: number })
         </p>
       </div>
 
-      {index === 1 && (
-        <Link
-          to="/booking"
+      {(service.cta_link || index === 1) && (
+        <a
+          href={service.cta_link?.startsWith("/") ? service.cta_link : "/contact"}
           aria-label={`Start an inquiry for ${service.name}`}
           className="absolute bottom-5 right-5 z-20 grid size-11 place-items-center rounded-full bg-[#d66f2f] text-white shadow-[0_12px_24px_rgba(199,107,47,0.3)] transition-transform group-hover:scale-105 focus-ring"
         >
           <ArrowUpRight className="size-5" />
-        </Link>
+        </a>
       )}
     </motion.article>
   );

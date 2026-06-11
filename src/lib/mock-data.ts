@@ -533,11 +533,12 @@ export const services = [
   },
   {
     id: "visa-assistance",
-    name: "Visa Concierge",
-    description: "Expedited filings, white-glove documentation handling.",
+    name: "Visa Guidance & Partner Assistance",
+    description:
+      "Basic travel guidance, document checklist help, and trusted third-party visa assistance partner connections when needed.",
     rating: 4.8,
     reviewCount: 441,
-    highlight: "The team handled my urgent paperwork while I focused on the trip.",
+    highlight: "Clear document guidance and partner assistance without false approval guarantees.",
   },
   {
     id: "hotel-booking",
@@ -634,8 +635,8 @@ export const serviceGallery = [
   },
   {
     src: "https://picsum.photos/seed/svc-visa/600/400",
-    caption: "Visa approved",
-    service: "Visa Concierge",
+    caption: "Document checklist support",
+    service: "Visa Guidance & Partner Assistance",
   },
   {
     src: "https://picsum.photos/seed/svc-honey/600/400",
@@ -708,7 +709,7 @@ export const communityReviews = [
   {
     id: "review-3",
     category: "Service",
-    subject: "Visa Concierge",
+    subject: "Visa Guidance & Partner Assistance",
     rating: 4.9,
     author: "Michael T.",
     location: "London",

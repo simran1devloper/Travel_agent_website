@@ -12,8 +12,6 @@ import {
   Calendar,
   Wallet,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Play,
   Camera,
   BadgeCheck,
@@ -26,15 +24,15 @@ import {
   Tag,
   Gift,
   Clock,
-  X,
   Award,
   Headphones,
-  ThumbsUp,
   Info,
   Map,
   MessageCircle,
   ReceiptText,
   BriefcaseBusiness,
+  Phone,
+  Mail,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -164,7 +162,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Cinematic, curated journeys. Hand-crafted itineraries, visa concierge, and 24/7 global support across 124+ destinations.",
+          "Cinematic, curated journeys. Hand-crafted itineraries, travel guidance, and 24/7 global support across 124+ destinations.",
       },
       { property: "og:title", content: "JourneyMakers — The world, re-stitched for you" },
       {
@@ -228,29 +226,22 @@ function Hero() {
       >
         <source src={MEDIA.heroVideo} type="video/mp4" />
       </video>
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,10,0.9)_0%,rgba(5,7,10,0.68)_38%,rgba(5,7,10,0.38)_67%,rgba(5,7,10,0.72)_100%),linear-gradient(180deg,rgba(5,7,10,0.04)_0%,rgba(5,7,10,0.48)_66%,rgba(5,7,10,0.9)_100%)]" />
-      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/20 to-transparent" />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,7,10,0.88)_0%,rgba(5,7,10,0.64)_37%,rgba(5,7,10,0.34)_63%,rgba(5,7,10,0.78)_100%),linear-gradient(180deg,rgba(5,7,10,0.18)_0%,rgba(5,7,10,0.22)_42%,rgba(5,7,10,0.94)_100%)]" />
+      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/42 to-transparent" />
 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, ease: [0.32, 0.72, 0, 1] }}
-        className="relative mx-auto flex min-h-[calc(100svh-72px)] w-full max-w-none flex-col justify-center gap-5 px-4 py-6 sm:px-6 lg:min-h-[calc(100svh-76px)] lg:justify-start lg:px-10 lg:pb-44 lg:pt-10 xl:px-12"
+        className="relative mx-auto flex min-h-[calc(100svh-72px)] w-full max-w-[1680px] flex-col justify-center gap-10 px-4 py-10 sm:px-6 lg:min-h-[calc(100svh-76px)] lg:px-10 lg:pb-10 lg:pt-16 xl:px-12"
       >
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(420px,0.8fr)_minmax(360px,0.62fr)_minmax(330px,0.55fr)] xl:grid-cols-[minmax(510px,0.85fr)_minmax(420px,0.68fr)_minmax(380px,0.6fr)] 2xl:grid-cols-[560px_500px_460px]">
-          <div className="max-w-[660px] pt-4 lg:pt-14">
+        <div className="grid items-center gap-8 lg:grid-cols-[minmax(380px,0.78fr)_minmax(0,1.22fr)] xl:grid-cols-[minmax(520px,0.82fr)_minmax(0,1.28fr)]">
+          <div className="max-w-[640px] pt-2 lg:pt-4">
             <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/18 bg-black/28 px-4 py-2 text-xs font-extrabold uppercase tracking-normal text-white/88 shadow-[0_18px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl">
               <Star className="size-3.5 fill-[#e88535] text-[#e88535]" />
               {c("hero", "badge", "Traveler-led luxury planning")}
             </span>
-            <p className="mb-4 max-w-2xl text-sm font-extrabold uppercase leading-6 tracking-normal text-white/72 md:text-base">
-              {c(
-                "hero",
-                "tagline",
-                "Discover places through the moments travelers never stopped talking about.",
-              )}
-            </p>
-            <h1 className="mb-6 max-w-[650px] text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_16px_38px_rgba(0,0,0,0.5)] sm:text-6xl md:text-7xl lg:text-[4.7rem] xl:text-[5.05rem]">
+            <h1 className="mb-6 max-w-[690px] text-balance text-5xl font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_16px_38px_rgba(0,0,0,0.5)] sm:text-6xl md:text-7xl lg:text-[4.8rem] xl:text-[5.4rem]">
               Build your journey from <span className="text-[#ef7d2a]">living memories</span>
             </h1>
             <p className="mb-6 max-w-2xl text-base leading-8 text-white/78 md:text-lg">
@@ -264,30 +255,28 @@ function Hero() {
             <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
               <Link
                 to="/booking"
-                className="inline-flex min-h-14 items-center justify-center rounded-full bg-[#e66f1f] px-9 text-sm font-extrabold text-white shadow-[0_18px_50px_rgba(230,111,31,0.36)] transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_24px_70px_rgba(230,111,31,0.46)] focus-ring"
+                className="inline-flex min-h-16 items-center justify-center gap-3 rounded-full bg-[#e66f1f] px-10 text-sm font-extrabold text-white shadow-[0_18px_50px_rgba(230,111,31,0.36)] transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_24px_70px_rgba(230,111,31,0.46)] focus-ring"
               >
-                {c("hero", "cta_primary", "Start Collecting")}
+                {c("hero", "cta_primary", "Start Collecting")} <ArrowUpRight className="size-4" />
               </Link>
               <Link
                 to="/packages"
-                className="inline-flex min-h-14 items-center justify-center rounded-full border border-white/30 bg-white/6 px-9 text-sm font-bold text-white backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/12 focus-ring"
+                className="inline-flex min-h-16 items-center justify-center gap-3 rounded-full border border-white/30 bg-white/6 px-10 text-sm font-bold text-white backdrop-blur-lg transition-all hover:-translate-y-0.5 hover:border-white hover:bg-white/12 focus-ring"
               >
-                {c("hero", "cta_secondary", "View Journeys")}
+                {c("hero", "cta_secondary", "View Journeys")} <ArrowUpRight className="size-4" />
               </Link>
             </div>
           </div>
 
-          <HeroDealCard onContact={openContactCard} />
-
-          <div className="grid gap-4 lg:mt-8 lg:max-w-[430px] lg:justify-self-end 2xl:max-w-[460px]">
-            <HeroTestimonialCard onContact={openContactCard} />
-            <HeroExitCard onContact={openContactCard} />
+          <div className="grid gap-4 md:grid-cols-3 lg:justify-self-end">
+            <HeroWhatWeDoCard />
+            <HeroExpertCard onContact={openContactCard} />
+            <HeroServicesCard />
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 lg:absolute lg:bottom-6 lg:left-10 xl:left-12">
+        <div className="mx-auto w-full max-w-[1360px]">
           <SearchBar />
-          <HeroTrustStrip />
         </div>
       </motion.div>
       <ContactInfoCard
@@ -345,7 +334,11 @@ const aboutHighlights = [
 ];
 
 function HomeAboutSection() {
+  const { c } = useContent("home");
   const [contactOpen, setContactOpen] = useState(false);
+  const aboutStatus = c("about_section", "status", "published");
+  if (aboutStatus === "hidden") return null;
+  const aboutImage = c("about_section", "image", "");
 
   return (
     <section className="bg-[#f7efe5] px-4 py-12 sm:px-6 md:py-16 lg:px-8">
@@ -373,16 +366,21 @@ function HomeAboutSection() {
         <div className="grid gap-10 xl:grid-cols-[minmax(0,0.95fr)_minmax(540px,0.88fr)] xl:gap-16">
           <div className="relative z-10 max-w-[650px]">
             <span className="mb-5 block text-xs font-extrabold uppercase tracking-[0.34em] text-[#d77232]">
-              About JourneyMakers
+              {c("about_section", "label", "About JourneyMakers")}
             </span>
             <h2 className="mb-6 text-4xl font-black leading-[1.12] tracking-normal text-[#17191b] sm:text-5xl lg:text-6xl">
-              We plan journeys that feel personal, smooth, and memorable.
+              {c(
+                "about_section",
+                "heading",
+                "We plan journeys that feel personal, smooth, and memorable.",
+              )}
             </h2>
             <p className="mb-7 text-base font-semibold leading-8 text-[#636363] sm:text-lg">
-              JourneyMakers helps travelers plan customized trips across India and international
-              destinations. From itinerary planning and hotel bookings to flights, transfers,
-              sightseeing, honeymoon packages, family tours, group travel, and corporate retreats,
-              we handle every detail with care and expert support.
+              {c(
+                "about_section",
+                "detailed_description",
+                "JourneyMakers helps travelers plan customized trips across India and international destinations. From itinerary planning and hotel bookings to flights, transfers, sightseeing, honeymoon packages, family tours, group travel, and corporate retreats, we handle every detail with care and expert support.",
+              )}
             </p>
 
             <div className="mb-7 flex gap-4 rounded-xl border border-[#dcccbc] bg-white/34 p-5 text-sm font-semibold leading-7 text-[#626262] shadow-sm sm:items-center sm:px-6">
@@ -431,7 +429,7 @@ function HomeAboutSection() {
 
             <div className="relative min-h-[420px] lg:min-h-full">
               <img
-                src={MEDIA.aboutDubaiSunset}
+                src={aboutImage || MEDIA.aboutDubaiSunset}
                 alt="Dubai luxury waterfront at sunset"
                 loading="lazy"
                 className="absolute inset-0 h-full w-full rounded-2xl object-cover shadow-[0_26px_70px_rgba(112,75,38,0.16)]"
@@ -481,210 +479,240 @@ function HomeAboutSection() {
   );
 }
 
-function HeroDealCard({ onContact }: { onContact: (message: string) => void }) {
-  return (
-    <aside className="hidden min-h-[440px] overflow-hidden rounded-2xl border border-[#d49a68]/50 bg-[#0c1014]/88 shadow-[0_30px_90px_rgba(0,0,0,0.48)] backdrop-blur-2xl lg:mt-8 lg:grid lg:grid-cols-[0.9fr_1.1fr] xl:min-h-[500px]">
-      <img
-        src={MEDIA.destinations["bangkok-singapore"]}
-        alt="Dubai beach luxury hotel at sunset"
-        className="h-full min-h-[440px] w-full object-cover xl:min-h-[500px]"
-      />
-      <div className="relative flex min-w-0 flex-col p-5 xl:p-7">
-        <button
-          type="button"
-          aria-label="Close offer"
-          className="absolute right-4 top-4 grid size-8 place-items-center rounded-full text-white/72 transition hover:bg-white/10 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
-        <span className="mb-5 w-fit rounded-full bg-[#a75e2a] px-4 py-2 text-[11px] font-black uppercase text-[#ffe5c7]">
-          Limited time offer
-        </span>
-        <h2 className="mb-3 text-3xl font-black leading-tight text-white xl:text-4xl">
-          Limited Travel Deal
-        </h2>
-        <p className="mb-5 text-sm leading-6 text-white/74 xl:text-base xl:leading-7">
-          Get customized packages for{" "}
-          <span className="font-bold text-white">Dubai, Bali, Thailand, Europe</span> and more
-        </p>
-        <button
-          type="button"
-          onClick={() => onContact("Hi JourneyMakers, I'd like the limited travel offer.")}
-          className="mb-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#df6d22] px-4 text-xs font-extrabold text-white shadow-[0_16px_34px_rgba(223,109,34,0.32)] transition hover:-translate-y-0.5 hover:bg-[#ee792a] focus-ring xl:text-sm"
-        >
-          <WhatsAppOutlineIcon className="size-5" /> Get Offer on WhatsApp
-        </button>
-        <div className="mb-3 border-b border-white/14 pb-3">
-          <p className="max-w-40 text-[11px] font-extrabold leading-5 text-white/58">
-            Trusted by Thousands of Travelers
-          </p>
-        </div>
-        <div className="grid flex-1 grid-cols-2 overflow-hidden border-b border-white/14">
-          <HeroMetric icon={Award} value="10+" label="Years of Experience" />
-          <HeroMetric icon={ThumbsUp} value="5000+" label="Happy Travelers" />
-          <HeroMetric icon={Star} value="4.9/5" label="Average Traveler Rating" />
-          <HeroMetric icon={Headphones} value="24/7" label="Trip Assistance" />
-        </div>
-        <label className="mt-4 flex items-center gap-2 text-xs font-semibold text-white/70">
-          <input
-            type="checkbox"
-            className="size-4 rounded border-white/30 bg-transparent accent-[#df6d22]"
-          />
-          Don't show again today
-        </label>
-      </div>
-    </aside>
-  );
-}
+const heroCardShell =
+  "rounded-2xl border border-[#d49a68]/70 bg-[#070b10]/64 p-5 shadow-[0_28px_86px_rgba(0,0,0,0.44)] backdrop-blur-2xl";
 
-function HeroMetric({
+function PanelIcon({
   icon: Icon,
-  value,
-  label,
+  className = "",
 }: {
   icon: React.ComponentType<{ className?: string }>;
-  value: string;
-  label: string;
+  className?: string;
 }) {
   return (
-    <div className="grid min-h-[92px] grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2 border-b border-r border-white/14 px-3 py-3 last:border-r-0 [&:nth-child(2)]:border-r-0 [&:nth-child(n+3)]:border-b-0">
-      <Icon className="size-6 shrink-0 justify-self-center text-[#eda36b]" />
-      <div className="min-w-0 text-center">
-        <div className="whitespace-nowrap text-lg font-black leading-none text-white">{value}</div>
-        <div className="mx-auto mt-1 max-w-[90px] whitespace-normal text-[10px] font-semibold leading-3 text-white/70">
-          {label}
-        </div>
-      </div>
-    </div>
+    <span
+      className={`grid size-12 shrink-0 place-items-center rounded-full border border-[#e87524]/70 bg-black/20 text-[#f07c26] ${className}`}
+    >
+      <Icon className="size-5" />
+    </span>
   );
 }
 
-function HeroTestimonialCard({ onContact }: { onContact: (message: string) => void }) {
-  const photos = [
-    MEDIA.destinations["tokyo-seoul"],
-    MEDIA.destinations["newyork"],
-    MEDIA.destinations.switzerland,
+function HeroWhatWeDoCard() {
+  const { c } = useContent("home");
+  const features = [
+    {
+      icon: ReceiptText,
+      label: c("about_section", "highlight_1", "Personalized trip planning"),
+    },
+    { icon: Headphones, label: c("about_section", "highlight_2", "End-to-end support") },
+    {
+      icon: Users,
+      label: c(
+        "about_section",
+        "highlight_3",
+        "For couples, families, groups, and corporate travelers",
+      ),
+    },
+    {
+      icon: ShieldCheck,
+      label: c("about_section", "highlight_4", "Crafted journeys, not generic packages"),
+    },
   ];
+  const ctaLink = c("about_section", "cta_link", "/about");
 
   return (
-    <aside className="hidden rounded-2xl border border-[#d49a68]/45 bg-[#0c1014]/88 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl lg:block">
-      <div className="relative mb-5 text-center">
-        <button
-          type="button"
-          aria-label="Close traveler review"
-          className="absolute right-0 top-0 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
-        <h2 className="font-serif text-2xl font-bold leading-none text-white">
-          What Our Travelers Say
-        </h2>
-        <div className="mx-auto mt-3 h-px w-32 bg-gradient-to-r from-transparent via-[#eda36b] to-transparent" />
+    <aside className={`${heroCardShell} flex min-h-[520px] flex-col`}>
+      <div className="mb-5 flex items-center gap-4">
+        <PanelIcon icon={Map} />
+        <h2 className="text-lg font-black leading-tight text-white">What We Do</h2>
       </div>
-      <div className="relative mb-4 grid grid-cols-3 gap-2">
-        <button
-          type="button"
-          aria-label="Previous review"
-          className="absolute -left-4 top-1/2 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full border border-white/18 bg-black/38 text-white backdrop-blur"
-        >
-          <ChevronLeft className="size-4" />
-        </button>
-        {photos.map((photo, index) => (
-          <img
-            key={photo}
-            src={photo}
-            alt={`Traveler review photo ${index + 1}`}
-            className="aspect-[1.05/1] w-full rounded-lg object-cover"
-          />
-        ))}
-        <button
-          type="button"
-          aria-label="Next review"
-          className="absolute -right-4 top-1/2 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full border border-white/18 bg-black/38 text-white backdrop-blur"
-        >
-          <ChevronRight className="size-4" />
-        </button>
-      </div>
-      <div className="mb-4 flex justify-center gap-1.5">
-        {[0, 1, 2, 3].map((dot) => (
-          <span
-            key={dot}
-            className={`size-2 rounded-full ${dot === 0 ? "bg-[#df6d22]" : "bg-white/30"}`}
-          />
-        ))}
-      </div>
-      <blockquote className="mx-auto mb-5 max-w-sm text-center text-sm font-semibold italic leading-6 text-white/82">
-        "Our Dubai trip was perfectly planned, hotels, transfers, and sightseeing were smooth."
-      </blockquote>
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        <div className="flex items-center justify-center gap-1.5 rounded-lg bg-white/8 px-3 py-2 text-xs font-bold text-white/82">
-          <Star className="size-4 fill-[#ffc247] text-[#ffc247]" /> 4.9/5 Traveler Rating
-        </div>
-        <div className="rounded-lg bg-white/8 px-3 py-2 text-center text-xs font-bold text-white/72">
-          Trusted by 5000+ travelers
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => onContact("Hi JourneyMakers, please plan a trip like this.")}
-        className="mb-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#df6d22] px-5 text-sm font-extrabold text-white transition hover:bg-[#ee792a] focus-ring"
-      >
-        <WhatsAppOutlineIcon className="size-5" /> Plan My Trip Like This
-      </button>
-      <div className="grid grid-cols-2 gap-2 text-center text-xs font-bold text-white/68">
-        <span className="flex items-center justify-center gap-1.5">
-          <ShieldCheck className="size-4 text-[#eda36b]" /> 10+ Years of Service
-        </span>
-        <span className="flex items-center justify-center gap-1.5">
-          <Gift className="size-4 text-[#eda36b]" /> Personalized Experiences
-        </span>
-      </div>
-    </aside>
-  );
-}
-
-function HeroExitCard({ onContact }: { onContact: (message: string) => void }) {
-  return (
-    <aside className="hidden rounded-2xl border border-[#d49a68]/45 bg-[#0c1014]/88 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl lg:block">
-      <div className="relative mb-4">
-        <button
-          type="button"
-          aria-label="Close itinerary prompt"
-          className="absolute right-0 top-0 grid size-7 place-items-center rounded-full text-white/70 transition hover:bg-white/10 hover:text-white"
-        >
-          <X className="size-5" />
-        </button>
-        <h2 className="max-w-[16rem] font-serif text-2xl font-bold leading-tight text-white">
-          Leaving without planning your trip?
-        </h2>
-      </div>
-      <p className="mb-5 max-w-sm text-sm font-medium leading-6 text-white/72">
-        Talk to our travel expert and get a free itinerary suggestion.
+      <div className="mb-6 h-px w-10 bg-[#ef7d2a]" />
+      <p className="mb-5 text-sm font-medium leading-7 text-white/76">
+        {c(
+          "about_section",
+          "short_description",
+          "JourneyMakers helps travelers plan smooth, personalized, and memorable trips. We exist to make travel easier and stress-free by handling destination planning, packages, hotels, flights, transfers, and on-trip support.",
+        )}
       </p>
-      <div className="mb-5 grid grid-cols-4 overflow-hidden rounded-lg border border-white/16">
-        {[
-          ["10+ Years", "Of Trust", Award],
-          ["5000+", "Happy Travelers", Users],
-          ["4.9/5", "Rated Service", ThumbsUp],
-          ["No Hidden", "Charges", Gift],
-        ].map(([top, bottom, Icon]) => (
+      <div className="grid gap-2">
+        {features.map(({ icon: Icon, label }) => (
           <div
-            key={`${top}-${bottom}`}
-            className="border-r border-white/16 px-2 py-3 text-center last:border-r-0"
+            key={label}
+            className="flex min-h-11 items-center gap-3 rounded-lg border border-white/12 bg-white/[0.03] px-3 text-sm font-semibold text-white/78"
           >
-            <Icon className="mx-auto mb-1.5 size-5 text-[#eda36b]" />
-            <div className="text-[11px] font-black leading-4 text-[#f1b078]">{top as string}</div>
-            <div className="text-[10px] font-bold leading-3 text-white/64">{bottom as string}</div>
+            <Icon className="size-4 shrink-0 text-[#ef7d2a]" />
+            <span>{label}</span>
           </div>
         ))}
       </div>
+      <a
+        href={ctaLink}
+        className="mt-auto inline-flex items-center gap-3 pt-8 text-sm font-extrabold text-[#ef7d2a] transition hover:text-[#ff9b4d] focus-ring"
+      >
+        {c("about_section", "cta_text", "Discover Our Story")} <ArrowUpRight className="size-4" />
+      </a>
+    </aside>
+  );
+}
+
+function HeroExpertCard({ onContact }: { onContact: (message: string) => void }) {
+  const { c } = useContent("contact");
+  const contactRows = [
+    {
+      icon: MessageCircle,
+      label: "WhatsApp",
+      value: c("contact_card", "whatsapp", "+91 98765 43210"),
+      accent: "text-[#35d66d]",
+    },
+    {
+      icon: Phone,
+      label: "Phone",
+      value: c("contact_card", "phone", "+91 98765 43210"),
+      accent: "text-[#ef7d2a]",
+    },
+    {
+      icon: Mail,
+      label: "Email",
+      value: c("contact_card", "email", "hello@journeymakers.com"),
+      accent: "text-[#ef7d2a]",
+    },
+  ];
+  const perks = [
+    { icon: MessageCircle, label: c("contact_card", "response_time", "Fast response") },
+    { icon: Users, label: c("contact_card", "guidance_text", "Personalized guidance") },
+    { icon: Calendar, label: c("contact_card", "discussion_text", "Free itinerary discussion") },
+  ];
+  const whatsappMessage = c(
+    "contact_card",
+    "whatsapp_message",
+    "Hi JourneyMakers, I want to plan a trip. Please share package details.",
+  );
+
+  return (
+    <aside className={`${heroCardShell} flex min-h-[520px] flex-col`}>
+      <div className="mb-5 flex items-center gap-4">
+        <PanelIcon icon={Users} />
+        <h2 className="text-lg font-black leading-tight text-white">
+          Talk to a <br /> Travel Expert
+        </h2>
+      </div>
+      <div className="mb-5 h-px w-10 bg-[#ef7d2a]" />
+      <div className="mb-5 flex items-center gap-4">
+        <div className="grid size-16 shrink-0 place-items-center rounded-full border border-white/22 bg-[linear-gradient(135deg,#f1b37c,#15191d)] text-base font-black text-white shadow-[0_14px_38px_rgba(0,0,0,0.34)]">
+          JM
+        </div>
+        <div>
+          <p className="text-sm font-black text-white">
+            {c("contact_card", "agent_name", "JourneyMakers")}
+          </p>
+          <p className="text-sm font-medium text-white/62">
+            {c("contact_card", "agent_role", "Travel Expert")}
+          </p>
+        </div>
+      </div>
+      <div className="mb-4 grid gap-3">
+        {contactRows.map(({ icon: Icon, label, value, accent }) => (
+          <div key={label} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-3">
+            <Icon className={`mt-1 size-5 ${accent}`} />
+            <div>
+              <p className="text-xs font-medium leading-4 text-white/58">{label}</p>
+              <p className="break-words text-sm font-bold leading-5 text-white">{value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mb-4 text-sm font-medium leading-6 text-white/72">
+        {c(
+          "contact_card",
+          "response_text",
+          "Get itinerary, package details, and pricing in minutes.",
+        )}
+      </p>
+      <div className="mb-5 border-t border-white/12 pt-4">
+        <div className="grid gap-2">
+          {perks.map(({ icon: Icon, label }) => (
+            <span
+              key={label}
+              className="flex items-center gap-3 text-xs font-semibold text-white/72"
+            >
+              <Icon className="size-4 text-[#ef7d2a]" />
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
       <button
         type="button"
-        onClick={() => onContact("Hi JourneyMakers, I'd like a free itinerary suggestion.")}
-        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#df6d22] px-5 text-sm font-extrabold text-white transition hover:bg-[#ee792a] focus-ring"
+        onClick={() => onContact(whatsappMessage)}
+        className="mt-auto inline-flex min-h-[3.25rem] items-center justify-center gap-3 rounded-xl bg-[#e66f1f] px-5 text-sm font-extrabold text-white shadow-[0_18px_42px_rgba(230,111,31,0.32)] transition hover:-translate-y-0.5 hover:bg-[#f17b28] focus-ring"
       >
-        <WhatsAppOutlineIcon className="size-5" /> Get Free Itinerary on WhatsApp
+        <WhatsAppOutlineIcon className="size-5" />{" "}
+        {c("contact_card", "cta_text", "Chat on WhatsApp")} <ArrowUpRight className="size-4" />
       </button>
+    </aside>
+  );
+}
+
+function HeroServicesCard() {
+  const { data: adminServices = [] } = useQuery({
+    queryKey: ["services", "hero-card"],
+    queryFn: api.services,
+  });
+  const fallbackServices = [
+    { icon: MapPin, label: "Curated Tour Packages" },
+    { icon: Hotel, label: "Hotel Booking" },
+    { icon: Plane, label: "Flight Booking" },
+    { icon: Heart, label: "Honeymoon Packages" },
+    { icon: Users, label: "Group Tours" },
+    { icon: BriefcaseBusiness, label: "Corporate Retreats" },
+    { icon: Globe2, label: "International Travel" },
+    { icon: ShieldCheck, label: "Custom Trip Planning" },
+    { icon: FileCheck, label: "Visa Guidance & Partner Assistance" },
+  ];
+  const services =
+    adminServices
+      .filter((service) => (service.status ?? "published") === "published")
+      .filter((service) => service.show_hero_card === true)
+      .slice(0, 9)
+      .map((service) => ({
+        icon: serviceIcons[service.id] ?? BriefcaseBusiness,
+        label: service.name,
+      })) ?? fallbackServices;
+  const visibleServices = services.length > 0 ? services : fallbackServices;
+
+  return (
+    <aside className={`${heroCardShell} flex min-h-[520px] flex-col`}>
+      <div className="mb-5 flex items-center gap-4">
+        <PanelIcon icon={BriefcaseBusiness} />
+        <h2 className="text-lg font-black leading-tight text-white">Our Services</h2>
+      </div>
+      <div className="mb-5 h-px w-10 bg-[#ef7d2a]" />
+      <div className="grid flex-1 grid-cols-2 gap-x-3">
+        {visibleServices.map(({ icon: Icon, label }, index) => (
+          <div
+            key={label}
+            className={`flex min-h-[58px] items-center gap-3 border-b border-white/10 py-3 text-xs font-semibold leading-4 text-white/76 ${
+              index % 2 === 0 ? "border-r pr-3" : "pl-1"
+            }`}
+          >
+            <Icon className="size-5 shrink-0 text-[#ef7d2a]" />
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-[#d49a68]/45 bg-[#e87524]/8 px-4 py-3">
+        <ShieldCheck className="size-5 shrink-0 text-[#ef7d2a]" />
+        <p className="text-xs font-semibold leading-5 text-white/76">
+          Basic guidance with trusted third-party partner assistance.
+        </p>
+      </div>
+      <Link
+        to="/services"
+        className="inline-flex items-center gap-3 pt-6 text-sm font-extrabold text-[#ef7d2a] transition hover:text-[#ff9b4d] focus-ring"
+      >
+        View All Services <ArrowUpRight className="size-4" />
+      </Link>
     </aside>
   );
 }
@@ -702,7 +730,7 @@ function SearchBar() {
   }
 
   return (
-    <div className="grid w-full max-w-[760px] grid-cols-1 gap-1 rounded-2xl border border-white/24 bg-[#11171d]/72 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-2xl md:grid-cols-[1fr_1fr_1fr_1fr_1.05fr] xl:max-w-[780px]">
+    <div className="grid w-full grid-cols-1 gap-1 rounded-2xl border border-white/24 bg-[#11171d]/74 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.36)] backdrop-blur-2xl md:grid-cols-[1fr_1fr_1fr_1fr_1.15fr]">
       <FieldGroup icon={MapPin} label="Destination">
         <input
           type="text"
@@ -742,7 +770,7 @@ function SearchBar() {
       <button
         type="button"
         onClick={handlePlanJourney}
-        className="flex min-h-14 items-center justify-center gap-2 rounded-xl bg-[#e66f1f] px-6 py-4 text-sm font-extrabold text-white transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_16px_36px_rgba(230,111,31,0.35)] active:scale-95 focus-ring"
+        className="flex min-h-16 items-center justify-center gap-3 rounded-xl bg-[#e66f1f] px-6 py-4 text-base font-extrabold text-white transition-all hover:-translate-y-0.5 hover:bg-[#f17b28] hover:shadow-[0_16px_36px_rgba(230,111,31,0.35)] active:scale-95 focus-ring"
       >
         Plan Journey <ArrowUpRight className="size-4" />
       </button>
@@ -760,38 +788,11 @@ function FieldGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col rounded-xl px-4 py-3 transition-colors hover:bg-white/8 md:border-r md:border-white/14 last:border-0">
-      <span className="mb-1.5 flex items-center gap-2 text-[11px] font-black uppercase tracking-normal text-white/74">
-        <Icon className="size-4 text-white/72" /> {label}
+    <div className="flex min-h-[4.5rem] flex-col rounded-xl px-4 py-3 transition-colors hover:bg-white/8 md:border-r md:border-white/14 last:border-0">
+      <span className="mb-1.5 flex items-center gap-3 text-xs font-black uppercase tracking-normal text-white/78">
+        <Icon className="size-5 text-[#ef7d2a]" /> {label}
       </span>
       {children}
-    </div>
-  );
-}
-
-function HeroTrustStrip() {
-  const trustItems = [
-    { icon: Award, value: "10+", label: "10+ Years of Trusted Service" },
-    { icon: Users, value: "5000+", label: "Happy Travelers" },
-    { icon: Star, value: "4.9/5", label: "Average Rating" },
-    { icon: Headphones, value: "24/7", label: "Trip Support" },
-    { icon: ShieldCheck, value: "Safe", label: "Secure & Hassle-Free Travel" },
-  ];
-
-  return (
-    <div className="grid w-full max-w-5xl grid-cols-1 overflow-hidden rounded-2xl border border-white/24 bg-[#11171d]/72 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-2xl sm:grid-cols-2 lg:grid-cols-5">
-      {trustItems.map(({ icon: Icon, value, label }) => (
-        <div
-          key={label}
-          className="flex min-h-20 items-center gap-3 border-b border-white/14 px-5 py-4 last:border-b-0 sm:border-r sm:last:border-r-0 lg:border-b-0"
-        >
-          <Icon className="size-8 shrink-0 text-[#eda36b]" />
-          <div>
-            <div className="text-lg font-black leading-tight text-white">{value}</div>
-            <div className="text-xs font-bold leading-4 text-white/72">{label}</div>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -1018,7 +1019,10 @@ function ServicesSection() {
       </section>
     );
 
-  const featured = allServices.slice(0, 8);
+  const featured = allServices
+    .filter((service) => (service.status ?? "published") === "published")
+    .filter((service) => service.show_homepage !== false)
+    .slice(0, 8);
   return (
     <section className="bg-[#0e1726] py-24 text-background md:py-32">
       <div className="section-shell grid grid-cols-1 gap-14 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
@@ -1033,7 +1037,7 @@ function ServicesSection() {
             {c(
               "services_section",
               "description",
-              "We do not just book flights. We orchestrate transitions between worlds: visas, jets, private chefs, and the moments in between.",
+              "We do not just book flights. We coordinate guidance, stays, routes, private touches, and the moments in between.",
             )}
           </p>
           <div className="mb-8 grid gap-3 text-sm text-background/76">
@@ -1075,7 +1079,9 @@ function ServicesSection() {
                     {s.rating.toFixed(1)} · {s.review_count} reviews
                   </span>
                 </div>
-                <p className="text-base leading-8 text-background/68">{s.description}</p>
+                <p className="text-base leading-8 text-background/68">
+                  {s.short_description || s.description}
+                </p>
                 <p className="mt-4 border-t border-white/10 pt-4 text-sm leading-7 text-white/86">
                   {s.highlight}
                 </p>
