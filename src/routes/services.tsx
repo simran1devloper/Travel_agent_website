@@ -1,21 +1,42 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { PageShell } from "@/components/page-shell";
-import { MediaStrip } from "@/components/media-collage";
-import { api } from "@/lib/api";
+import {
+  ArrowUpRight,
+  Award,
+  BadgeCheck,
+  Headphones,
+  Home,
+  LockKeyhole,
+  ShieldCheck,
+  Star,
+} from "lucide-react";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteNav } from "@/components/site-nav";
+import { WhatsAppFab } from "@/components/whatsapp-fab";
+import { api, type ApiService } from "@/lib/api";
 import { useContent } from "@/lib/use-content";
+import businessMeetingImage from "@/assets/business_meeting_by_the_ocean_at_sunset.png";
+import deskEssentialsImage from "@/assets/elegant_desk_with_travel_essentials.png";
+import friendsPromenadeImage from "@/assets/coastal_sunset_with_friends_on_promenade.png";
+import hikeImage from "@/assets/golden_hour_hike_in_alpine_valley.png";
+import mediterraneanVillageImage from "@/assets/golden_hour_over_a_mediterranean_village.png.png";
+import planningDeskImage from "@/assets/travel_planning_essentials_on_a_cozy_desk.png";
+import romanticDinnerImage from "@/assets/romantic_sunset_dinner_by_the_sea.png";
+import skiesImage from "@/assets/serene_skies_at_sunset_over_the_clouds.png";
+import skylinePoolImage from "@/assets/sunset_skyline_from_a_luxurious_pool_terrace.png";
+import villaTerraceImage from "@/assets/serene_sunset_over_luxury_villa_terrace.png";
 
 export const Route = createFileRoute("/services")({
   head: () => ({
     meta: [
-      { title: "Services — JourneyMakers" },
+      { title: "Services - JourneyMakers" },
       {
         name: "description",
         content:
           "Visa concierge, hotel & flight booking, honeymoon packages, corporate retreats, and bespoke planning.",
       },
-      { property: "og:title", content: "Services — JourneyMakers" },
+      { property: "og:title", content: "Services - JourneyMakers" },
       { property: "og:description", content: "Everything we orchestrate, end-to-end." },
       { property: "og:url", content: "/services" },
     ],
@@ -24,6 +45,181 @@ export const Route = createFileRoute("/services")({
   component: ServicesPage,
 });
 
+const fallbackServices: ApiService[] = [
+  {
+    id: "tour-packages",
+    name: "Curated Tour Packages",
+    description: "Hand-crafted itineraries across 124+ destinations.",
+    rating: 4.9,
+    review_count: 512,
+    highlight: "They crafted the exact pace I needed - effortless and luxurious.",
+    gallery: [],
+    sort_order: 1,
+  },
+  {
+    id: "visa-assistance",
+    name: "Visa Concierge",
+    description: "Expedited filings, white-glove documentation handling.",
+    rating: 4.8,
+    review_count: 441,
+    highlight: "The team handled my urgent paperwork while I focused on the trip.",
+    gallery: [],
+    sort_order: 2,
+  },
+  {
+    id: "hotel-booking",
+    name: "Luxury Hotel Booking",
+    description: "Negotiated rates at the world's best properties.",
+    rating: 4.9,
+    review_count: 378,
+    highlight: "Every stay felt upgraded, from arrival to late checkout.",
+    gallery: [],
+    sort_order: 3,
+  },
+  {
+    id: "flight-booking",
+    name: "Flight Booking",
+    description: "Business and first-class fares, multi-city routing.",
+    rating: 4.8,
+    review_count: 398,
+    highlight: "They found the perfect routing with minimal layovers.",
+    gallery: [],
+    sort_order: 4,
+  },
+  {
+    id: "corporate-tours",
+    name: "Corporate Retreats",
+    description: "Off-sites that change company culture.",
+    rating: 4.7,
+    review_count: 259,
+    highlight: "Our team returned with stronger bonds and zero logistics headaches.",
+    gallery: [],
+    sort_order: 5,
+  },
+  {
+    id: "group-tours",
+    name: "Group Tours",
+    description: "Small private groups, never bus-tour scale.",
+    rating: 4.8,
+    review_count: 311,
+    highlight: "The group experience felt intimate and perfectly timed.",
+    gallery: [],
+    sort_order: 6,
+  },
+  {
+    id: "honeymoon",
+    name: "Honeymoon Packages",
+    description: "Stories that begin a marriage.",
+    rating: 4.9,
+    review_count: 287,
+    highlight: "Attention to detail made every moment feel special.",
+    gallery: [],
+    sort_order: 7,
+  },
+  {
+    id: "adventure",
+    name: "Adventure Expeditions",
+    description: "Sahara, Patagonia, Himalayas - properly equipped.",
+    rating: 4.8,
+    review_count: 330,
+    highlight: "The guides knew every ridge, trail, and local story.",
+    gallery: [],
+    sort_order: 8,
+  },
+  {
+    id: "international",
+    name: "International Travel",
+    description: "Global routing handled end-to-end.",
+    rating: 4.8,
+    review_count: 364,
+    highlight: "We felt supported in every timezone.",
+    gallery: [],
+    sort_order: 9,
+  },
+  {
+    id: "domestic",
+    name: "Domestic Travel",
+    description: "Hidden corners of home, beautifully arranged.",
+    rating: 4.7,
+    review_count: 225,
+    highlight: "Domestic escapes felt as polished as overseas journeys.",
+    gallery: [],
+    sort_order: 10,
+  },
+  {
+    id: "passport",
+    name: "Passport Assistance",
+    description: "Renewals, expediting, lost-passport recovery.",
+    rating: 4.9,
+    review_count: 402,
+    highlight: "They resolved my embassy appointments with ease.",
+    gallery: [],
+    sort_order: 11,
+  },
+  {
+    id: "custom-trip",
+    name: "Custom Trip Planning",
+    description: "From a single line of brief to a finished journey.",
+    rating: 4.9,
+    review_count: 487,
+    highlight: "Every detail matched our request better than expected.",
+    gallery: [],
+    sort_order: 12,
+  },
+];
+
+const serviceImages: Record<string, string> = {
+  "tour-packages": mediterraneanVillageImage,
+  "visa-assistance": deskEssentialsImage,
+  "hotel-booking": villaTerraceImage,
+  "flight-booking": skiesImage,
+  "corporate-tours": businessMeetingImage,
+  "group-tours": friendsPromenadeImage,
+  honeymoon: romanticDinnerImage,
+  adventure: hikeImage,
+  international: skylinePoolImage,
+  domestic: mediterraneanVillageImage,
+  passport: deskEssentialsImage,
+  "custom-trip": planningDeskImage,
+};
+
+const fallbackImages = [
+  mediterraneanVillageImage,
+  deskEssentialsImage,
+  villaTerraceImage,
+  skiesImage,
+  businessMeetingImage,
+  friendsPromenadeImage,
+  romanticDinnerImage,
+  hikeImage,
+  skylinePoolImage,
+  planningDeskImage,
+];
+
+const cardLayouts = [
+  "lg:col-span-2 lg:row-span-2",
+  "lg:col-span-3 lg:row-span-2",
+  "lg:col-span-2 lg:row-span-2",
+  "lg:col-span-2",
+  "lg:col-span-2",
+  "lg:col-span-3",
+  "lg:col-span-2",
+  "lg:col-span-3",
+  "lg:col-span-2",
+  "lg:col-span-2",
+  "lg:col-span-2",
+  "lg:col-span-3",
+];
+
+const lightCards = new Set([
+  "visa-assistance",
+  "flight-booking",
+  "corporate-tours",
+  "group-tours",
+  "passport",
+  "custom-trip",
+]);
+
 function ServicesPage() {
   const { c } = useContent("services");
   const servicesQuery = useQuery({
@@ -31,88 +227,255 @@ function ServicesPage() {
     queryFn: api.services,
   });
 
-  const services = servicesQuery.data ?? [];
-
-  if (servicesQuery.isLoading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full max-w-4xl px-4">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-40 rounded-2xl bg-gray-100 animate-pulse" />
-        ))}
-      </div>
-    </div>
-  );
-
-  // Build service gallery from services that have gallery items
-  const serviceGallery = services.flatMap((s) =>
-    s.gallery.map((g) => ({ src: g.src, caption: g.caption, service: s.name })),
-  );
+  const services = servicesQuery.data?.length ? servicesQuery.data : fallbackServices;
 
   return (
-    <PageShell
-      eyebrow={c("hero", "eyebrow", "What we orchestrate")}
-      title={c("hero", "title", "Twelve services. One concierge.")}
-      description={c("hero", "body", "From visa filings to private aviation, every detail handled by a single planner.")}
-    >
-      {serviceGallery.length > 0 && (
-        <div className="mt-8 mb-10">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <span className="font-mono text-xs text-accent uppercase tracking-[0.2em] block mb-1">
-                Seen by our travelers
-              </span>
-              <p className="text-sm text-muted-foreground">
-                Real moments from every service — swipe to explore.
-              </p>
+    <>
+      <SiteNav />
+      <main className="min-h-screen bg-[#f6f1ea] text-[#15181d]">
+        <ServiceHero c={c} />
+        <TrustStrip />
+
+        <section className="section-shell pb-8 pt-8 md:pt-10">
+          <span className="eyebrow">Our services</span>
+          <h2 className="mt-3 max-w-4xl text-3xl font-semibold leading-tight md:text-4xl">
+            Curated experiences. Seamless execution.
+          </h2>
+
+          {servicesQuery.isLoading ? (
+            <ServiceGridSkeleton />
+          ) : (
+            <div className="mt-6 grid auto-rows-[220px] grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-7">
+              {services.slice(0, 12).map((service, index) => (
+                <ServiceCard key={service.id} service={service} index={index} />
+              ))}
             </div>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] hidden md:block">
-              Click any photo to expand
-            </span>
-          </div>
-          <MediaStrip items={serviceGallery} />
+          )}
+        </section>
+
+        <PartnerAssistance />
+
+        <section className="section-shell flex flex-col items-center pb-10 pt-4 text-center">
+          <Link
+            to="/booking"
+            className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[#0e1726] px-9 text-xs font-extrabold uppercase text-white shadow-[0_18px_45px_rgba(14,23,38,0.18)] transition-all hover:-translate-y-0.5 hover:bg-[#c76b2f] focus-ring"
+          >
+            Start an inquiry
+            <ArrowUpRight className="size-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </Link>
+          <p className="mt-4 text-sm font-medium text-[#59606a]">
+            Tell us your travel plans and we'll take care of the rest.
+          </p>
+        </section>
+      </main>
+      <SiteFooter />
+      <WhatsAppFab />
+    </>
+  );
+}
+
+function ServiceHero({ c }: { c: (section: string, key: string, fallback?: string) => string }) {
+  return (
+    <section className="section-shell grid min-h-[430px] gap-8 pb-8 pt-12 md:grid-cols-[1.05fr_0.95fr] md:items-center md:pt-16">
+      <div className="relative z-10">
+        <span className="eyebrow">{c("hero", "eyebrow", "Services")}</span>
+        <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-[0.98] tracking-normal md:text-7xl">
+          {c("hero", "title", "Everything we orchestrate, end-to-end.")}
+        </h1>
+        <p className="mt-6 max-w-xl text-lg font-medium leading-8 text-[#59606a]">
+          {c(
+            "hero",
+            "body",
+            "Visa concierge, hotel & flight booking, honeymoon packages, corporate retreats, and bespoke planning.",
+          )}
+        </p>
+      </div>
+
+      <div className="relative min-h-[280px] overflow-hidden rounded-l-[8px] rounded-r-none md:-mr-8 md:min-h-[360px]">
+        <img
+          src={villaTerraceImage}
+          alt="Private terrace overlooking a golden coastline"
+          className="absolute inset-0 size-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-[#f6f1ea]/30" />
+        <div className="absolute -left-16 bottom-10 hidden size-28 place-items-center rounded-full border border-[#cda27b]/55 bg-[#f6f1ea]/78 text-center text-[#a86b42] shadow-[0_16px_45px_rgba(14,23,38,0.1)] backdrop-blur-md md:grid">
+          <div className="text-3xl font-serif">JM</div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function TrustStrip() {
+  const items = [
+    { icon: ShieldCheck, title: "10+ Years of", body: "Crafting Journeys" },
+    { icon: Star, title: "4.8+ Average Rating", body: "From 2,000+ Travelers" },
+    { icon: LockKeyhole, title: "Secure Payments", body: "100% Protected" },
+    { icon: Headphones, title: "24/7 Concierge", body: "Always by your side" },
+  ];
+
+  return (
+    <section className="section-shell">
+      <div className="grid overflow-hidden rounded-[8px] border border-[#d8c9b8] bg-[#fbf8f3]/72 shadow-[0_14px_36px_rgba(14,23,38,0.06)] backdrop-blur sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <div
+              key={item.title}
+              className={`flex min-h-16 items-center gap-4 px-6 py-4 ${index ? "border-t border-[#d8c9b8] sm:border-l sm:border-t-0" : ""} ${index === 2 ? "sm:border-t lg:border-t-0" : ""}`}
+            >
+              <Icon className="size-6 shrink-0 text-[#c76b2f]" />
+              <div>
+                <p className="text-xs font-extrabold leading-4">{item.title}</p>
+                <p className="text-xs font-semibold leading-4 text-[#59606a]">{item.body}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ServiceGridSkeleton() {
+  return (
+    <div className="mt-6 grid auto-rows-[220px] grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-7">
+      {Array.from({ length: 12 }).map((_, index) => (
+        <div
+          key={index}
+          className={`${cardLayouts[index]} animate-pulse rounded-[8px] border border-[#d8c9b8] bg-[#ebe3d8]`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ServiceCard({ service, index }: { service: ApiService; index: number }) {
+  const isLight = lightCards.has(service.id);
+  const image =
+    serviceImages[service.id] ??
+    service.gallery?.find((item) => item.type === "photo")?.src ??
+    fallbackImages[index % fallbackImages.length];
+  const layout = cardLayouts[index % cardLayouts.length];
+
+  return (
+    <motion.article
+      initial={{ opacity: 0, y: 18 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.5, delay: (index % 4) * 0.05, ease: [0.32, 0.72, 0, 1] }}
+      className={`${layout} group relative min-h-[220px] overflow-hidden rounded-[8px] border border-[#d8c9b8] bg-[#fbf8f3] shadow-[0_16px_38px_rgba(14,23,38,0.07)]`}
+    >
+      <img
+        src={image}
+        alt={service.name}
+        className={`absolute inset-0 size-full object-cover transition-transform duration-700 group-hover:scale-105 ${isLight ? "opacity-55" : "opacity-100"}`}
+      />
+      <div
+        className={`absolute inset-0 ${
+          isLight
+            ? "bg-gradient-to-r from-[#fbf8f3] via-[#fbf8f3]/88 to-[#fbf8f3]/20"
+            : "bg-gradient-to-t from-[#07101d]/90 via-[#07101d]/42 to-[#07101d]/8"
+        }`}
+      />
+
+      {index === 1 && (
+        <span className="absolute left-5 top-4 rounded-full bg-[#e36f2c] px-3 py-1 text-[10px] font-extrabold uppercase text-white">
+          Most trusted
+        </span>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border border border-border rounded-2xl overflow-hidden">
-        {services.map((s, i) => (
-          <motion.div
-            key={s.id}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.5, delay: (i % 3) * 0.08, ease: [0.32, 0.72, 0, 1] }}
-            className="bg-background p-8 hover:bg-secondary transition-colors group"
-          >
-            <div className="font-mono text-[10px] text-accent uppercase tracking-widest mb-4">
-              [{String(i + 1).padStart(2, "0")}]
-            </div>
-            <h3 className="text-xl font-bold mb-2 group-hover:text-accent transition-colors">
-              {s.name}
-            </h3>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-3">
-              <span className="text-amber-400">★</span>
-              <span>{s.rating.toFixed(1)}</span>
-              <span className="text-border">·</span>
-              <span>{s.review_count} reviews</span>
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed text-pretty mb-3">
-              {s.description}
-            </p>
-            <p className="text-xs text-foreground/70 italic leading-relaxed border-l-2 border-accent/40 pl-3">
-              "{s.highlight}"
-            </p>
-          </motion.div>
-        ))}
+      <div
+        className={`relative z-10 flex h-full flex-col justify-end p-5 ${isLight ? "text-[#15181d]" : "text-white"}`}
+      >
+        <span
+          className={`mb-3 font-mono text-[11px] font-bold ${isLight ? "text-[#c76b2f]" : "text-white/72"}`}
+        >
+          [{String(index + 1).padStart(2, "0")}]
+        </span>
+        <h3 className="text-xl font-extrabold leading-tight">{service.name}</h3>
+        <div
+          className={`mt-2 flex items-center gap-2 text-xs font-semibold ${isLight ? "text-[#59606a]" : "text-white/78"}`}
+        >
+          <Star className="size-3.5 fill-[#f4b63f] text-[#f4b63f]" />
+          <span>{service.rating.toFixed(1)}</span>
+          <span>{service.review_count} reviews</span>
+        </div>
+        <p
+          className={`mt-4 max-w-sm text-sm font-semibold leading-6 ${isLight ? "text-[#3f4650]" : "text-white/84"}`}
+        >
+          {service.description}
+        </p>
+        <p
+          className={`mt-4 max-w-sm text-xs italic leading-5 ${isLight ? "text-[#59606a]" : "text-white/76"}`}
+        >
+          "{service.highlight}"
+        </p>
       </div>
 
-      <div className="mt-12 flex justify-center">
+      {index === 1 && (
         <Link
           to="/booking"
-          className="inline-flex items-center bg-foreground text-background px-8 py-4 rounded-full text-sm font-bold tracking-widest uppercase hover:bg-accent transition-colors"
+          aria-label={`Start an inquiry for ${service.name}`}
+          className="absolute bottom-5 right-5 z-20 grid size-11 place-items-center rounded-full bg-[#d66f2f] text-white shadow-[0_12px_24px_rgba(199,107,47,0.3)] transition-transform group-hover:scale-105 focus-ring"
         >
-          Start an inquiry
+          <ArrowUpRight className="size-5" />
+        </Link>
+      )}
+    </motion.article>
+  );
+}
+
+function PartnerAssistance() {
+  const points = [
+    { icon: Home, title: "Expert Guidance", body: "Clear steps, every time" },
+    { icon: BadgeCheck, title: "Higher Approval Rate", body: "Proven track record" },
+    { icon: Award, title: "End-to-End Support", body: "From start to stamp" },
+  ];
+
+  return (
+    <section className="section-shell py-4">
+      <div className="grid gap-6 rounded-[8px] border border-[#d8c9b8] bg-[#fbf2e8]/88 p-5 shadow-[0_14px_36px_rgba(14,23,38,0.05)] lg:grid-cols-[1.2fr_1fr_auto] lg:items-center">
+        <div className="flex gap-4">
+          <div className="grid size-12 shrink-0 place-items-center rounded-full border border-[#d6a27b] bg-[#fff8ef] text-[#c76b2f]">
+            <ShieldCheck className="size-6" />
+          </div>
+          <div>
+            <span className="eyebrow">Partner assistance</span>
+            <h3 className="mt-1 text-2xl font-semibold leading-tight">
+              Visa guidance. No guesswork, just results.
+            </h3>
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[#59606a]">
+              From documentation to approvals, our visa experts handle the complexity so you can
+              focus on the journey.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {points.map((point) => {
+            const Icon = point.icon;
+            return (
+              <div key={point.title} className="flex items-center gap-3">
+                <Icon className="size-7 shrink-0 text-[#b7835d]" />
+                <div>
+                  <p className="text-xs font-extrabold leading-4">{point.title}</p>
+                  <p className="text-[11px] font-semibold leading-4 text-[#59606a]">{point.body}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <Link
+          to="/services"
+          hash="visa"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#d66f2f] px-6 text-xs font-extrabold uppercase text-white shadow-[0_12px_26px_rgba(199,107,47,0.22)] transition-all hover:-translate-y-0.5 focus-ring"
+        >
+          Learn more
+          <ArrowUpRight className="size-3.5" />
         </Link>
       </div>
-    </PageShell>
+    </section>
   );
 }

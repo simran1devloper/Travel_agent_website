@@ -131,8 +131,9 @@ function mapPkg(p: ApiPackage): MappedPackage {
     days: p.days,
     price: p.price,
     category: p.category ?? "Journey",
-    image:
-      MEDIA.destinations?.[p.slug] ?? p.image_url ?? `https://picsum.photos/seed/${p.slug}/800/600`,
+    image: p.image_url
+      ? resolveReviewMediaUrl(p.image_url)
+      : (MEDIA.destinations?.[p.slug] ?? `https://picsum.photos/seed/${p.slug}/800/600`),
     tagline: p.tagline,
     rating: p.rating ?? 4.8,
     reviewCount: p.review_count,
@@ -143,8 +144,9 @@ function mapDest(d: ApiDestination): MappedDestination {
   return {
     slug: d.slug,
     name: d.name,
-    image:
-      MEDIA.destinations?.[d.slug] ?? d.image_url ?? `https://picsum.photos/seed/${d.slug}/800/600`,
+    image: d.image_url
+      ? resolveReviewMediaUrl(d.image_url)
+      : (MEDIA.destinations?.[d.slug] ?? `https://picsum.photos/seed/${d.slug}/800/600`),
     packagesCount: d.packages_count,
     tagline: d.tagline,
     duration: d.duration,

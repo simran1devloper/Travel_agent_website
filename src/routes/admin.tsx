@@ -8,6 +8,7 @@ import { PageShell } from "@/components/page-shell";
 import { StarRating } from "@/components/star-rating";
 import { MEDIA } from "@/config/media";
 import {
+  API_BASE_URL,
   api,
   type ApiMedia,
   type AdminReview,
@@ -86,6 +87,9 @@ function resolveAdminMediaUrl(url: string | undefined, slug: string, size = "600
       PACKAGE_MEDIA_BY_SLUG[slug] ??
       `https://picsum.photos/seed/${slug}/${size}`
     );
+  }
+  if (url.startsWith("/")) {
+    return `${API_BASE_URL}${url}`;
   }
   return url;
 }
@@ -1772,6 +1776,14 @@ function PackagesTab() {
                   />
                 </AdminField>
                 <AdminField label="Image or video URL" className="sm:col-span-2">
+                  <PackageMediaUpload
+                    imageUrl={pkgModal.data.image_url}
+                    slug={pkgModal.data.slug || pkgModal.data.title || "package"}
+                    title={pkgModal.data.title || "Package media"}
+                    onUploaded={(url) =>
+                      setPkgModal((m) => m && { ...m, data: { ...m.data, image_url: url } })
+                    }
+                  />
                   <input
                     value={pkgModal.data.image_url}
                     onChange={(e) =>
@@ -1779,7 +1791,7 @@ function PackagesTab() {
                         (m) => m && { ...m, data: { ...m.data, image_url: e.target.value } },
                       )
                     }
-                    className="admin-input"
+                    className="admin-input mt-3"
                     placeholder="https://example.com/photo.jpg or https://example.com/reel.mp4"
                   />
                 </AdminField>
@@ -2085,7 +2097,7 @@ function PackageModal({
               {modal.mode === "add" ? "Add Package" : "Edit Package"}
             </h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Add details manually and paste an image or video URL for the card media.
+              Add details manually, upload local media, or paste an image or video URL.
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-1.5 hover:bg-secondary">
@@ -2166,10 +2178,16 @@ function PackageModal({
               />
             </AdminField>
             <AdminField label="Image or video URL" className="sm:col-span-2">
+              <PackageMediaUpload
+                imageUrl={modal.data.image_url}
+                slug={modal.data.slug || modal.data.title || "package"}
+                title={modal.data.title || "Package media"}
+                onUploaded={(url) => update("image_url", url)}
+              />
               <input
                 value={modal.data.image_url}
                 onChange={(e) => update("image_url", e.target.value)}
-                className="admin-input"
+                className="admin-input mt-3"
                 placeholder="https://example.com/photo.jpg or https://example.com/reel.mp4"
               />
             </AdminField>
@@ -2225,6 +2243,93 @@ function PackageModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function PackageMediaUpload({
+  imageUrl,
+  slug,
+  title,
+  onUploaded,
+}: {
+  imageUrl: string;
+  slug: string;
+  title: string;
+  onUploaded: (url: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const previewUrl = imageUrl ? resolveAdminMediaUrl(imageUrl, slug, "600/400") : "";
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    setUploading(true);
+    try {
+      const uploaded = await api.adminUploadMedia(file, title);
+      onUploaded(uploaded.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed. Please try another file.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-secondary/25 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {previewUrl ? (
+          <AdminMediaPreview
+            src={previewUrl}
+            alt={title}
+            className="h-24 w-full rounded-lg object-cover bg-secondary sm:w-36"
+          />
+        ) : (
+          <div className="flex h-24 w-full items-center justify-center rounded-lg bg-secondary text-muted-foreground sm:w-36">
+            <Image className="size-6" />
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold">Upload from local storage</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Choose a JPG, PNG, WebP, MP4, or MOV file. The uploaded URL will be added below.
+          </p>
+          {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex min-h-10 items-center gap-2 rounded-full bg-foreground px-4 text-xs font-bold text-background disabled:opacity-60"
+            >
+              <Upload className="size-3.5" />
+              {uploading ? "Uploading..." : imageUrl ? "Replace file" : "Upload file"}
+            </button>
+            {imageUrl && (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => onUploaded("")}
+                className="inline-flex min-h-10 items-center rounded-full border border-border px-4 text-xs font-bold disabled:opacity-60"
+              >
+                Clear media
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files?.[0])}
+      />
     </div>
   );
 }

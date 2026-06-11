@@ -154,10 +154,9 @@ function mapApiPackage(pkg: ApiPackage): PackageItem {
     days: pkg.days,
     price: pkg.price,
     category: pkg.category ?? "Journey",
-    image:
-      MEDIA.destinations?.[pkg.slug] ??
-      pkg.image_url ??
-      `https://picsum.photos/seed/${pkg.slug}/800/600`,
+    image: pkg.image_url
+      ? resolveReviewMediaUrl(pkg.image_url)
+      : (MEDIA.destinations?.[pkg.slug] ?? `https://picsum.photos/seed/${pkg.slug}/800/600`),
     tagline: pkg.tagline,
     description: pkg.description,
     rating: pkg.rating ?? 4.8,
