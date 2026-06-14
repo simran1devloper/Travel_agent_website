@@ -152,6 +152,47 @@ class SQLiteReviewRepository(IReviewRepository):
                 (1 if verified else 0, updated_at, public_id),
             )
 
+    def list_approved_by_entity(self, entity_type: str, entity_slug: str) -> list[dict[str, Any]]:
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT r.*, c.name as customer_name FROM reviews r
+                JOIN customers c ON c.id = r.customer_id
+                WHERE r.entity_type = ? AND r.entity_slug = ? AND r.status = 'approved'
+                ORDER BY r.created_at DESC
+                """,
+                (entity_type, entity_slug),
+            ).fetchall()
+        return [row_to_dict(r) for r in rows]  # type: ignore[misc]
+
+    def create_entity_review(self, data: dict[str, Any]) -> None:
+        with self._db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO reviews
+                (public_id, customer_id, package_slug, entity_type, entity_slug,
+                 rating, title, body, trip_date, media_urls, status, created_at, updated_at)
+                VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)
+                """,
+                (
+                    data["public_id"], data["customer_id"],
+                    data["entity_type"], data["entity_slug"],
+                    data["rating"], data.get("title", ""), data["body"],
+                    data.get("trip_date"),
+                    json_dumps(data.get("media_urls", [])),
+                    data["created_at"], data["updated_at"],
+                ),
+            )
+
+    def get_entity_rating_stats(self, entity_type: str, entity_slug: str) -> tuple[float, int]:
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT AVG(CAST(rating AS REAL)), COUNT(*)"
+                " FROM reviews WHERE entity_type = ? AND entity_slug = ? AND status = 'approved'",
+                (entity_type, entity_slug),
+            ).fetchone()
+        return (round(row[0] or 0, 1), int(row[1]))
+
     def get_stats_by_package(self, slug: str) -> dict[str, Any]:
         with self._db.connect() as conn:
             rows = conn.execute(

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from ....application.customer_service import CustomerService
 from ....application.media_service import MediaService
@@ -14,12 +14,23 @@ from ..dependencies import get_customer_service, get_media_service
 router = APIRouter(tags=["media"])
 
 
+# ── Storage backend discovery ─────────────────────────────────────────────────
+
+@router.get("/admin/storage/backends", dependencies=[Depends(require_admin)])
+def list_storage_backends(
+    svc: MediaService = Depends(get_media_service),
+) -> dict[str, Any]:
+    """Return the available storage backends for this deployment."""
+    return {"backends": svc.available_backends()}
+
+
 # ── Admin upload ──────────────────────────────────────────────────────────────
 
 @router.post("/media", dependencies=[Depends(require_admin)])
 async def upload_media(
     file: UploadFile = File(...),
     alt_text: str | None = None,
+    storage_backend: str | None = Query(default=None, description="Storage backend: local, gdrive, r2"),
     svc: MediaService = Depends(get_media_service),
 ) -> dict[str, Any]:
     content = await file.read()
@@ -28,6 +39,7 @@ async def upload_media(
         content=content,
         content_type=file.content_type or "application/octet-stream",
         alt_text=alt_text,
+        storage_backend=storage_backend,
     )
 
 

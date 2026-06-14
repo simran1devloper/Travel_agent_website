@@ -39,6 +39,11 @@ class PackageService:
                 "review_count": payload.review_count,
                 "reviews": payload.reviews,
                 "published": payload.published,
+                "card_type": payload.card_type,
+                "destination_slugs": payload.destination_slugs,
+                "service_ids": payload.service_ids,
+                "offer_ids": payload.offer_ids,
+                "media_urls": payload.media_urls,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -61,6 +66,11 @@ class PackageService:
                 "review_count": payload.review_count,
                 "reviews": payload.reviews,
                 "published": payload.published,
+                "card_type": payload.card_type,
+                "destination_slugs": payload.destination_slugs,
+                "service_ids": payload.service_ids,
+                "offer_ids": payload.offer_ids,
+                "media_urls": payload.media_urls,
                 "updated_at": utc_now(),
             },
         )

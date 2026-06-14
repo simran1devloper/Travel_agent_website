@@ -108,6 +108,8 @@ export type InquiryPayload = {
   travel_styles: string[];
   services: string[];
   preferred_dates?: string;
+  date_from?: string;
+  date_to?: string;
   adults: number;
   children: number;
   budget?: string;
@@ -116,6 +118,7 @@ export type InquiryPayload = {
   inspiration: string[];
   inspiration_links?: string;
   trip_feel?: string;
+  basket_items?: string[];
 };
 
 export type ContactPayload = {
@@ -151,6 +154,11 @@ export type ApiPackage = {
   rating?: number;
   review_count: number;
   published?: boolean;
+  card_type?: "normal" | "pomplate";
+  destination_slugs?: string[];
+  service_ids?: number[];
+  offer_ids?: number[];
+  media_urls?: string[];
 };
 
 export type PackagePayload = {
@@ -164,6 +172,11 @@ export type PackagePayload = {
   tagline?: string;
   description?: string;
   published?: boolean;
+  card_type?: "normal" | "pomplate";
+  destination_slugs?: string[];
+  service_ids?: number[];
+  offer_ids?: number[];
+  media_urls?: string[];
 };
 
 export type DestinationPayload = {
@@ -174,6 +187,7 @@ export type DestinationPayload = {
   tagline?: string;
   duration?: string;
   price?: number;
+  gallery?: { type: "photo" | "video"; src: string; caption: string; author: string }[];
 };
 
 export type ApiDestination = {
@@ -237,6 +251,61 @@ export type AdminReview = {
   media_urls: string[];
   created_at: string;
   updated_at?: string;
+};
+
+export type ModeratorReview = {
+  id: number;
+  public_id: string;
+  package_slug: string;
+  rating: number;
+  body: string;
+  status: string;
+  created_at: string;
+  moderation_note: string | null;
+  customer_name: string | null;
+};
+
+export type ModeratorInquiry = {
+  public_id: string;
+  full_name: string;
+  email: string;
+  destinations: string[];
+  budget: string | null;
+  status: string;
+  created_at: string;
+  moderator_note: string | null;
+  planner_name: string | null;
+};
+
+export type ModeratorMedia = {
+  id: number;
+  filename: string;
+  url: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  moderation_status: string;
+  created_at: string;
+  owner_id: number | null;
+};
+
+export type ApiComment = {
+  id: number;
+  public_id: string;
+  entity_type: string;
+  entity_slug: string;
+  name: string;
+  email?: string;
+  body: string;
+  status: string;
+  created_at: string;
+};
+
+export type CommentPayload = {
+  entity_type: "package" | "destination" | "service";
+  entity_slug: string;
+  name: string;
+  email?: string;
+  body: string;
 };
 
 export type ApiPlanner = {
@@ -346,6 +415,7 @@ export type ApiService = {
   image_url?: string;
   icon_url?: string;
   image_alt?: string;
+  price?: number;
   rating: number;
   review_count: number;
   highlight: string;
@@ -371,6 +441,7 @@ export type ServicePayload = {
   image_url?: string;
   icon_url?: string;
   image_alt?: string;
+  price?: number;
   rating?: number;
   review_count?: number;
   highlight?: string;
@@ -533,11 +604,14 @@ export const api = {
     }),
 
   // Admin media
-  adminUploadMedia: (file: File, altText?: string) => {
+  adminUploadMedia: (file: File, altText?: string, backend?: string) => {
     const form = new FormData();
     form.append("file", file);
     if (altText) form.append("alt_text", altText);
-    return request<{ id: number; url: string }>("/media", {
+    const path = backend && backend !== "local"
+      ? `/media?storage_backend=${encodeURIComponent(backend)}`
+      : "/media";
+    return request<{ id: number; url: string }>(path, {
       method: "POST",
       admin: true,
       body: form,
@@ -594,6 +668,35 @@ export const api = {
     }),
   deletePlanner: (id: number) =>
     request<{ deleted: number }>(`/planners/${id}`, { method: "DELETE", admin: true }),
+
+  // Reviews on destinations + services
+  getEntityReviews: (entityType: "destination" | "service", slug: string) =>
+    request<ApiReview[]>(`/${entityType}s/${slug}/reviews`),
+  submitEntityReview: (entityType: "destination" | "service", slug: string, payload: ReviewPayload) =>
+    request<{ id: string; status: string }>(`/${entityType}s/${slug}/reviews`, {
+      method: "POST",
+      customer: true,
+      body: JSON.stringify(payload),
+    }),
+
+  // Comments
+  getEntityComments: (entityType: "package" | "destination" | "service", slug: string) =>
+    request<ApiComment[]>(`/${entityType}/${slug}/comments`),
+  submitComment: (payload: CommentPayload) =>
+    request<{ id: string; status: string }>("/comments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  adminListComments: (status?: string) =>
+    request<ApiComment[]>(`/admin/comments${status ? `?status=${status}` : ""}`, { admin: true }),
+  adminUpdateComment: (publicId: string, status: string) =>
+    request<ApiComment>(`/admin/comments/${publicId}`, {
+      method: "PATCH",
+      admin: true,
+      body: JSON.stringify({ status }),
+    }),
+  adminDeleteComment: (publicId: string) =>
+    request<{ deleted: string }>(`/admin/comments/${publicId}`, { method: "DELETE", admin: true }),
 
   // Reviews
   getPackageReviews: (slug: string) => request<ApiReview[]>(`/packages/${slug}/reviews`),
@@ -890,4 +993,44 @@ export const api = {
       "/admin/inquiries/bulk",
       { method: "POST", admin: true, body: JSON.stringify({ public_ids: publicIds, status }) },
     ),
+
+  // ── Moderator endpoints ───────────────────────────────────────────────────
+  moderatorReviews: (page = 1) =>
+    request<{ items: ModeratorReview[]; total: number; page: number }>(
+      `/moderator/reviews?page=${page}`,
+      { admin: true },
+    ),
+
+  moderatorPatchReview: (publicId: string, payload: { status?: string; moderation_note?: string }) =>
+    request<{ ok: boolean }>(`/moderator/reviews/${publicId}`, {
+      method: "PATCH",
+      admin: true,
+      body: JSON.stringify(payload),
+    }),
+
+  moderatorInquiries: (page = 1) =>
+    request<{ items: ModeratorInquiry[]; total: number; page: number }>(
+      `/moderator/inquiries?page=${page}`,
+      { admin: true },
+    ),
+
+  moderatorPatchInquiry: (publicId: string, moderatorNote: string) =>
+    request<{ ok: boolean }>(`/moderator/inquiries/${publicId}`, {
+      method: "PATCH",
+      admin: true,
+      body: JSON.stringify({ moderator_note: moderatorNote }),
+    }),
+
+  moderatorMedia: (page = 1, status = "pending") =>
+    request<{ items: ModeratorMedia[]; total: number; page: number }>(
+      `/moderator/media?page=${page}&status=${status}`,
+      { admin: true },
+    ),
+
+  moderatorPatchMedia: (mediaId: number, status: string) =>
+    request<{ ok: boolean }>(`/moderator/media/${mediaId}`, {
+      method: "PATCH",
+      admin: true,
+      body: JSON.stringify({ status }),
+    }),
 };

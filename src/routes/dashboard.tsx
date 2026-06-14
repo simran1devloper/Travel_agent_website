@@ -22,6 +22,7 @@ import {
   Lock,
   Plus,
   Pencil,
+  MessageSquare,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard")({
@@ -77,6 +78,7 @@ function DashboardAuthGate() {
 }
 
 function DashboardContent() {
+  const { localUser } = useLocalAuth();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [memoryFormOpen, setMemoryFormOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{ slug: string; title: string } | null>(null);
@@ -112,6 +114,20 @@ function DashboardContent() {
 
   return (
     <PageShell eyebrow={`Welcome back, ${customerName}`} title="Your travel archive.">
+      {/* Moderator / admin shortcut */}
+      {(localUser?.role === "moderator" || localUser?.role === "admin") && (
+        <div className="mb-8 flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-5 py-3">
+          <MessageSquare className="size-5 text-muted-foreground" />
+          <p className="text-sm font-medium flex-1">You have moderator access.</p>
+          <Link
+            to="/moderator"
+            className="rounded-full bg-foreground px-4 py-1.5 text-xs font-bold text-background hover:opacity-80"
+          >
+            Open Moderation Panel
+          </Link>
+        </div>
+      )}
+
       {/* Tab navigation */}
       <div className="mb-10 flex gap-1 border-b border-border">
         {tabs.map((tab) => (

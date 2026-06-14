@@ -208,8 +208,11 @@ export type AdminTabKey =
   | "offers"
   | "media"
   | "reviews"
+  | "comments"
+  | "inquiries"
   | "contact"
-  | "pages";
+  | "pages"
+  | "settings";
 
 export function useAdminTabPref() {
   return useLocalStorage<AdminTabKey>("jm_admin_tab", "overview");

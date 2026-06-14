@@ -33,8 +33,10 @@ class SQLitePackageRepository(IPackageRepository):
                 """
                 INSERT INTO packages
                 (slug, title, location, days, price, category, image_url, tagline,
-                 description, rating, review_count, reviews, published, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 description, rating, review_count, reviews, published,
+                 card_type, destination_slugs, service_ids, offer_ids, media_urls,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["slug"], data["title"], data["location"], data["days"],
@@ -42,6 +44,11 @@ class SQLitePackageRepository(IPackageRepository):
                     data.get("tagline"), data.get("description"), data.get("rating"),
                     data.get("review_count", 0), json_dumps(data.get("reviews", [])),
                     1 if data.get("published", True) else 0,
+                    data.get("card_type", "normal"),
+                    json_dumps(data.get("destination_slugs", [])),
+                    json_dumps(data.get("service_ids", [])),
+                    json_dumps(data.get("offer_ids", [])),
+                    json_dumps(data.get("media_urls", [])),
                     data["created_at"], data["updated_at"],
                 ),
             )
@@ -53,7 +60,8 @@ class SQLitePackageRepository(IPackageRepository):
                 UPDATE packages
                 SET title=?, location=?, days=?, price=?, category=?, image_url=?,
                     tagline=?, description=?, rating=?, review_count=?, reviews=?,
-                    published=?, updated_at=?
+                    published=?, card_type=?, destination_slugs=?, service_ids=?,
+                    offer_ids=?, media_urls=?, updated_at=?
                 WHERE slug=?
                 """,
                 (
@@ -62,6 +70,11 @@ class SQLitePackageRepository(IPackageRepository):
                     data.get("description"), data.get("rating"),
                     data.get("review_count", 0), json_dumps(data.get("reviews", [])),
                     1 if data.get("published", True) else 0,
+                    data.get("card_type", "normal"),
+                    json_dumps(data.get("destination_slugs", [])),
+                    json_dumps(data.get("service_ids", [])),
+                    json_dumps(data.get("offer_ids", [])),
+                    json_dumps(data.get("media_urls", [])),
                     data["updated_at"], slug,
                 ),
             )

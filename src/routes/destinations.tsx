@@ -11,6 +11,8 @@ import {
   MapPin,
   Play,
   Plus,
+  Search,
+  ShoppingBag,
   Sparkles,
   Star,
   Users,
@@ -18,11 +20,15 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CommentBox } from "@/components/comment-box";
+import { DestinationReviewsSection } from "@/components/entity-reviews";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
 import { MEDIA } from "@/config/media";
 import { api, type ApiDestination, type ApiGalleryItem } from "@/lib/api";
+import { useBasket, writeCheckoutPrefill } from "@/lib/basket";
+import { DateRangePicker, formatDateRange, type DateRange } from "@/components/date-range-picker";
 import { useDestinationFilterState } from "@/lib/user-prefs";
 import { useContent } from "@/lib/use-content";
 
@@ -485,9 +491,20 @@ function DestinationGrid() {
 
   const [activeFilter, setActiveFilter] = useDestinationFilterState();
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
+  const [search, setSearch] = useState("");
 
-  // Real tag-based filtering using destination name/slug/tagline patterns
   const filteredDestinations = destinations.filter((d) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !d.name.toLowerCase().includes(q) &&
+        !d.slug.toLowerCase().includes(q) &&
+        !(d.tagline ?? "").toLowerCase().includes(q) &&
+        !(destinationProfiles[d.slug]?.bestFor ?? "").toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+    }
     if (activeFilter === "all") return true;
     const searchable =
       `${d.name} ${d.slug} ${d.tagline ?? ""} ${destinationProfiles[d.slug]?.mood ?? ""} ${destinationProfiles[d.slug]?.bestFor ?? ""}`.toLowerCase();
@@ -553,6 +570,29 @@ function DestinationGrid() {
           </p>
         </div>
 
+        {/* Search */}
+        <div className="mb-4 flex items-center gap-3">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search destinations..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-full border border-border bg-white/80 py-3 pl-11 pr-5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#c76b2f]"
+            />
+          </div>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="text-sm font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
         {/* Filter tags */}
         <div className="mb-8 flex flex-wrap gap-2">
           {DEST_FILTER_TAGS.map((tag) => (
@@ -610,67 +650,101 @@ function DestinationCard({
   onOpen: () => void;
 }) {
   const profile = destinationProfiles[destination.slug];
+  const { add: addToBasket, remove: removeFromBasket, has: inBasket } = useBasket();
+  const isInBasket = inBasket(destination.slug, "destination");
+
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <article
       className="group overflow-hidden rounded-3xl border border-border bg-white shadow-[0_18px_54px_rgba(14,23,38,0.08)] transition-all duration-500 hover:-translate-y-1.5 hover:shadow-[0_28px_80px_rgba(14,23,38,0.14)]"
     >
-      <div className="relative aspect-[4/5] overflow-hidden">
-        <img
-          src={destination.image}
-          alt={destination.name}
-          width={800}
-          height={1000}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/84 via-black/18 to-transparent" />
-        <div className="absolute left-5 top-5 rounded-full bg-white/90 px-4 py-2 text-xs font-bold text-foreground backdrop-blur-md">
-          {profile?.mood}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full text-left"
+        aria-label={`View details for ${destination.name}`}
+      >
+        <div className="relative aspect-[4/5] overflow-hidden">
+          <img
+            src={destination.image}
+            alt={destination.name}
+            width={800}
+            height={1000}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/84 via-black/18 to-transparent" />
+          <div className="absolute left-5 top-5 rounded-full bg-white/90 px-4 py-2 text-xs font-bold text-foreground backdrop-blur-md">
+            {profile?.mood}
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+            <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
+              <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
+                {destination.reviewCount ?? 0}+ traveler moments
+              </span>
+              <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
+                {profile?.curated} curated experiences
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold leading-tight">{destination.name}</h3>
+            <p className="mt-2 text-base leading-7 text-white/80">{destination.tagline}</p>
+          </div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
-          <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
-            <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
-              {destination.reviewCount ?? 0}+ traveler moments
+        <div className="p-6 pb-3">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <span className="text-sm font-semibold text-muted-foreground">
+              Best for {profile?.bestFor}
             </span>
-            <span className="rounded-full bg-white/14 px-3 py-1.5 backdrop-blur-md">
-              {profile?.curated} curated experiences
+            <span className="inline-flex items-center gap-1 text-sm font-bold text-[#7a512f]">
+              <Heart className="size-4 fill-[#d7aa73] text-[#d7aa73]" /> {profile?.saved}
             </span>
           </div>
-          <h3 className="text-3xl font-bold leading-tight">{destination.name}</h3>
-          <p className="mt-2 text-base leading-7 text-white/80">{destination.tagline}</p>
+          <div className="mb-5 flex flex-wrap gap-2">
+            {profile?.popular.map((item) => (
+              <span
+                key={item}
+                className="rounded-full bg-[#f2e5d6] px-3 py-1.5 text-sm font-semibold text-[#7a512f]"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+          <p className="text-base leading-8 text-muted-foreground">
+            "{profile?.quote}"{" "}
+            <span className="font-semibold text-foreground/70">- {profile?.quoteAuthor}</span>
+          </p>
+          <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+            <span className="text-sm font-semibold text-accent">{profile?.uploaded}</span>
+            <ArrowUpRight className="size-5 text-foreground transition-transform group-hover:translate-x-1" />
+          </div>
         </div>
+      </button>
+      <div className="px-6 pb-5">
+        <button
+          type="button"
+          onClick={() => {
+            if (isInBasket) {
+              removeFromBasket(destination.slug, "destination");
+            } else {
+              addToBasket({
+                type: "destination",
+                slug: destination.slug,
+                name: destination.name,
+                price: destination.price,
+                image: destination.image,
+              });
+            }
+          }}
+          className={`flex w-full min-h-10 items-center justify-center gap-2 rounded-full border text-sm font-bold transition-all hover:-translate-y-0.5 focus-ring ${
+            isInBasket
+              ? "border-[#c76b2f] bg-[#c76b2f]/10 text-[#c76b2f]"
+              : "border-border bg-white text-foreground hover:border-[#c76b2f] hover:text-[#c76b2f]"
+          }`}
+        >
+          <ShoppingBag className="size-4" />
+          {isInBasket ? "Added to Basket ✓" : "Add to Basket"}
+        </button>
       </div>
-      <div className="p-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <span className="text-sm font-semibold text-muted-foreground">
-            Best for {profile?.bestFor}
-          </span>
-          <span className="inline-flex items-center gap-1 text-sm font-bold text-[#7a512f]">
-            <Heart className="size-4 fill-[#d7aa73] text-[#d7aa73]" /> {profile?.saved}
-          </span>
-        </div>
-        <div className="mb-5 flex flex-wrap gap-2">
-          {profile?.popular.map((item) => (
-            <span
-              key={item}
-              className="rounded-full bg-[#f2e5d6] px-3 py-1.5 text-sm font-semibold text-[#7a512f]"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-        <p className="text-base leading-8 text-muted-foreground">
-          "{profile?.quote}"{" "}
-          <span className="font-semibold text-foreground/70">- {profile?.quoteAuthor}</span>
-        </p>
-        <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
-          <span className="text-sm font-semibold text-accent">{profile?.uploaded}</span>
-          <ArrowUpRight className="size-5 text-foreground transition-transform group-hover:translate-x-1" />
-        </div>
-      </div>
-    </button>
+    </article>
   );
 }
 
@@ -681,7 +755,29 @@ function DestinationDetailModal({
   destination: Destination | null;
   onClose: () => void;
 }) {
+  const [travelDates, setTravelDates] = useState<DateRange | undefined>(undefined);
+  const { add: addToBasket, remove: removeFromBasket, has: inBasket } = useBasket();
+
   if (!destination) return null;
+
+  const isInBasket = inBasket(destination.slug, "destination");
+
+  function handleAddToBasket() {
+    const item = {
+      type: "destination" as const,
+      slug: destination!.slug,
+      name: destination!.name,
+      price: destination!.price,
+      image: destination!.image,
+      dateFrom: travelDates?.from?.toISOString(),
+      dateTo: travelDates?.to?.toISOString(),
+    };
+    if (isInBasket) {
+      removeFromBasket(destination!.slug, "destination");
+    } else {
+      addToBasket(item);
+    }
+  }
 
   const profile = destinationProfiles[destination.slug];
   const specs =
@@ -757,6 +853,11 @@ function DestinationDetailModal({
             <DetailList title="Local highlights" items={specs.localHighlights} />
             <DetailList title="Fun facts" items={specs.funFacts} />
             <DetailList title="Planning notes" items={specs.practicalNotes} />
+            <DateRangePicker
+              label="When are you planning to travel?"
+              value={travelDates}
+              onChange={setTravelDates}
+            />
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 to="/packages"
@@ -764,14 +865,46 @@ function DestinationDetailModal({
               >
                 See matching packages <ArrowUpRight className="size-4" />
               </Link>
-              <Link
-                to="/booking"
-                className="inline-flex min-h-12 flex-1 items-center justify-center rounded-full border border-border bg-white px-5 text-sm font-extrabold text-foreground hover:border-accent hover:text-accent focus-ring"
+              <button
+                type="button"
+                onClick={handleAddToBasket}
+                className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border px-5 text-sm font-extrabold transition-all focus-ring ${
+                  isInBasket
+                    ? "border-[#c76b2f] bg-[#c76b2f]/10 text-[#c76b2f]"
+                    : "border-border bg-white text-foreground hover:border-accent hover:text-accent"
+                }`}
               >
-                Plan this destination
-              </Link>
+                <ShoppingBag className="size-4" />
+                {isInBasket ? "In Basket ✓" : "Add to Basket"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  writeCheckoutPrefill([
+                    {
+                      type: "destination",
+                      slug: destination.slug,
+                      name: destination.name,
+                      price: destination.price,
+                      image: destination.image,
+                      dateFrom: travelDates?.from?.toISOString(),
+                      dateTo: travelDates?.to?.toISOString(),
+                    },
+                  ]);
+                  window.location.href = "/booking";
+                }}
+                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-border bg-white px-5 text-sm font-extrabold text-foreground hover:border-accent hover:text-accent focus-ring"
+              >
+                Plan now <ArrowUpRight className="size-4" />
+              </button>
             </div>
           </div>
+        </div>
+
+        {/* Reviews + Comments for this destination */}
+        <div className="border-t border-border px-6 py-8 md:px-8">
+          <DestinationReviewsSection slug={destination.slug} name={destination.name} />
+          <CommentBox entityType="destination" entitySlug={destination.slug} className="mt-8" />
         </div>
       </div>
     </div>

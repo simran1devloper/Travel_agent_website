@@ -24,20 +24,24 @@ from fastapi.staticfiles import StaticFiles
 from .adapters.inbound.routers import (
     auth,
     bulk,
+    comments,
     contacts,
     content,
     dashboard,
     destinations,
     faqs,
+    gdrive,
     inquiries,
     media,
     memories,
+    moderator,
     offers,
     packages,
     planners,
     reviews,
     services,
     site_stats,
+    system_settings,
     testimonials,
     wishlist,
 )
@@ -61,9 +65,20 @@ from .domain.exceptions import (
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    from .adapters.outbound.sqlite.connection import SQLiteDatabase
-    db = SQLiteDatabase(str(settings.database_path))
-    migrate(db)                              # apply DDL + seed once
+    from .container import _build_database
+    from .adapters.outbound.neon.connection import NeonPostgresDatabase
+    db = _build_database(settings)
+    if isinstance(db, NeonPostgresDatabase):
+        # Neon Postgres: migrations use SQLite DDL and cannot run on Postgres.
+        # Schema must be created separately with a Postgres-compatible migration tool.
+        import logging
+        logging.getLogger(__name__).warning(
+            "Neon Postgres backend selected — skipping SQLite migrations. "
+            "Ensure the Postgres schema is initialised separately."
+        )
+    else:
+        # local-sqlite, gdrive-sqlite, r2-sqlite all use SQLite under the hood
+        migrate(db)
     app.state.container = build_container(settings)  # wire DI graph
     yield
     # teardown (connections are short-lived per request; nothing to close)
@@ -125,20 +140,24 @@ def create_app() -> FastAPI:
     for rtr in (
         auth.router,
         bulk.router,
+        comments.router,
         contacts.router,
         content.router,
         dashboard.router,
         destinations.router,
         faqs.router,
+        gdrive.router,
         inquiries.router,
         media.router,
         memories.router,
+        moderator.router,
         offers.router,
         packages.router,
         planners.router,
         reviews.router,
         services.router,
         site_stats.router,
+        system_settings.router,
         testimonials.router,
         wishlist.router,
     ):

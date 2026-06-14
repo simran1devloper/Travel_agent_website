@@ -48,6 +48,52 @@ def submit_review(
     return svc.submit(slug, payload, customer_id)
 
 
+@router.get("/destinations/{slug}/reviews")
+def list_destination_reviews(
+    slug: str,
+    svc: ReviewService = Depends(get_review_service),
+) -> list[dict[str, Any]]:
+    return svc.list_by_entity("destination", slug)
+
+
+@router.post("/destinations/{slug}/reviews", status_code=201)
+def submit_destination_review(
+    slug: str,
+    payload: ReviewCreate,
+    auth_user: dict[str, Any] | None = Depends(require_customer),
+    cust_svc: CustomerService = Depends(get_customer_service),
+    svc: ReviewService = Depends(get_review_service),
+) -> dict[str, Any]:
+    customer_id = _resolve_customer_id(auth_user, cust_svc)
+    if not customer_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return svc.submit_for_entity("destination", slug, payload, customer_id)
+
+
+@router.get("/services/{slug}/reviews")
+def list_service_reviews(
+    slug: str,
+    svc: ReviewService = Depends(get_review_service),
+) -> list[dict[str, Any]]:
+    return svc.list_by_entity("service", slug)
+
+
+@router.post("/services/{slug}/reviews", status_code=201)
+def submit_service_review(
+    slug: str,
+    payload: ReviewCreate,
+    auth_user: dict[str, Any] | None = Depends(require_customer),
+    cust_svc: CustomerService = Depends(get_customer_service),
+    svc: ReviewService = Depends(get_review_service),
+) -> dict[str, Any]:
+    customer_id = _resolve_customer_id(auth_user, cust_svc)
+    if not customer_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return svc.submit_for_entity("service", slug, payload, customer_id)
+
+
 @router.get("/reviews")
 def list_all_public_reviews(
     svc: ReviewService = Depends(get_review_service),

@@ -13,6 +13,7 @@ import {
   MapPin,
   MessageCircle,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   Star,
   Users,
@@ -23,6 +24,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
+import { useBasket, writeCheckoutPrefill } from "@/lib/basket";
+import { DateRangePicker, formatDateRange, type DateRange } from "@/components/date-range-picker";
 import { MEDIA } from "@/config/media";
 import {
   API_BASE_URL,
@@ -33,6 +36,7 @@ import {
   type ApiReviewStats,
 } from "@/lib/api";
 import { ReviewForm } from "@/components/review-form";
+import { CommentBox } from "@/components/comment-box";
 import { StarRating } from "@/components/star-rating";
 import {
   useRecentlyViewed,
@@ -725,20 +729,31 @@ function DestinationStoryCard({
       : false;
   }
 
-  function openContactPage() {
-    void router.navigate({ to: "/contact" });
+  function openBookingPage() {
+    writeCheckoutPrefill([
+      {
+        type: "package",
+        slug: packageItem.slug,
+        name: packageItem.title,
+        price: packageItem.price,
+        days: packageItem.days,
+        image: packageItem.image,
+        location: packageItem.location,
+      },
+    ]);
+    void router.navigate({ to: "/booking" });
   }
 
   function handleCardClick(event: React.MouseEvent<HTMLElement>) {
     if (isInteractiveTarget(event.target)) return;
-    openContactPage();
+    openBookingPage();
   }
 
   function handleCardKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     if (isInteractiveTarget(event.target)) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openContactPage();
+      openBookingPage();
     }
   }
 
@@ -764,7 +779,7 @@ function DestinationStoryCard({
       transition={{ duration: 0.65, delay: Math.min(index * 0.05, 0.16) }}
       role="link"
       tabIndex={0}
-      aria-label={`Contact JourneyMakers about ${packageItem.title}`}
+      aria-label={`Plan a journey for ${packageItem.title}`}
       onClick={handleCardClick}
       onKeyDown={handleCardKeyDown}
       className="cursor-pointer overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_28px_80px_rgba(23,23,23,0.08)] focus-ring"
@@ -829,6 +844,7 @@ function DestinationStoryCard({
 
       <div className="px-5 pb-8 md:px-8">
         <PackageReviewsSection slug={packageItem.slug} title={packageItem.title} />
+        <CommentBox entityType="package" entitySlug={packageItem.slug} className="mt-8" />
       </div>
     </motion.article>
   );
@@ -846,10 +862,12 @@ function JourneyDetailPanel({
   onOpenDetails: () => void;
 }) {
   const [saving, setSaving] = useState(false);
-  // Guest wishlist persists in localStorage; API wishlist used when logged in
+  const [travelDates, setTravelDates] = useState<DateRange | undefined>(undefined);
   const { toggle: toggleWishlist, has: inWishlist } = useGuestWishlist();
   const saved = inWishlist(packageItem.slug);
   const { toggle: toggleCompare, has: inCompare, isFull } = useCompareList();
+  const { add: addToBasket, remove: removeFromBasket, has: inBasket } = useBasket();
+  const isInBasket = inBasket(packageItem.slug, "package");
 
   return (
     <div>
@@ -884,19 +902,24 @@ function JourneyDetailPanel({
         </p>
       </div>
 
-      <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+      <DateRangePicker
+        label="When are you planning to travel?"
+        value={travelDates}
+        onChange={setTravelDates}
+        className="mt-6"
+      />
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           disabled={saving}
           onClick={async () => {
-            // Optimistically toggle guest wishlist (instant, no spinner needed)
             toggleWishlist(packageItem.slug);
-            // Also sync to API in background (best-effort)
             setSaving(true);
             try {
               await api.saveWishlist(packageItem.slug);
             } catch {
-              // API call failed — guest wishlist still updated, that's fine
+              // best-effort
             } finally {
               setSaving(false);
             }
@@ -906,12 +929,34 @@ function JourneyDetailPanel({
           {saved ? "Saved ✓" : saving ? "Saving..." : "Save moment"}{" "}
           <Heart className={`size-4 ${saved ? "fill-current" : ""}`} />
         </button>
-        <Link
-          to="/booking"
-          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border border-black/12 px-5 text-sm font-extrabold text-foreground transition-all hover:-translate-y-0.5 hover:bg-[#f7f2ea] focus-ring"
+        <button
+          type="button"
+          onClick={() => {
+            if (isInBasket) {
+              removeFromBasket(packageItem.slug, "package");
+            } else {
+              addToBasket({
+                type: "package",
+                slug: packageItem.slug,
+                name: packageItem.title,
+                price: packageItem.price,
+                days: packageItem.days,
+                image: packageItem.image,
+                location: packageItem.location,
+                dateFrom: travelDates?.from?.toISOString(),
+                dateTo: travelDates?.to?.toISOString(),
+              });
+            }
+          }}
+          className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full border px-5 text-sm font-extrabold transition-all hover:-translate-y-0.5 focus-ring ${
+            isInBasket
+              ? "border-[#c76b2f] bg-[#c76b2f]/10 text-[#c76b2f]"
+              : "border-black/12 text-foreground hover:bg-[#f7f2ea]"
+          }`}
         >
-          Explore journey <ArrowUpRight className="size-4" />
-        </Link>
+          <ShoppingBag className="size-4" />
+          {isInBasket ? "In Basket ✓" : "Add to Basket"}
+        </button>
         <button
           type="button"
           onClick={() => toggleCompare(packageItem.slug)}
@@ -955,6 +1000,8 @@ function PackageDetailModal({
   packageItem: PackageItem | null;
   onClose: () => void;
 }) {
+  const [travelDates, setTravelDates] = useState<DateRange | undefined>(undefined);
+
   if (!packageItem) return null;
 
   const places = getPlacesForPackage(packageItem);
@@ -1045,13 +1092,34 @@ function PackageDetailModal({
             <PackageDetailList title="Included planning" items={spec.inclusions} />
             <PackageDetailList title="Fun facts" items={spec.funFacts} />
             <PackageDetailList title="Planning notes" items={spec.planningNotes} />
+            <DateRangePicker
+              label="When are you planning to travel?"
+              value={travelDates}
+              onChange={setTravelDates}
+            />
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/booking"
+              <button
+                type="button"
+                onClick={() => {
+                  writeCheckoutPrefill([
+                    {
+                      type: "package",
+                      slug: packageItem.slug,
+                      name: packageItem.title,
+                      price: packageItem.price,
+                      days: packageItem.days,
+                      image: packageItem.image,
+                      location: packageItem.location,
+                      dateFrom: travelDates?.from?.toISOString(),
+                      dateTo: travelDates?.to?.toISOString(),
+                    },
+                  ]);
+                  window.location.href = "/booking";
+                }}
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#171717] px-5 text-sm font-extrabold text-white hover:bg-accent focus-ring"
               >
                 Plan this package <ArrowUpRight className="size-4" />
-              </Link>
+              </button>
               <button
                 type="button"
                 onClick={onClose}

@@ -50,6 +50,31 @@ class ReviewService:
         self._packages.update_rating(slug, rating, count, now)
         return {"id": public_id, "status": "approved"}
 
+    def list_by_entity(self, entity_type: str, entity_slug: str) -> list[dict[str, Any]]:
+        return self._reviews.list_approved_by_entity(entity_type, entity_slug)
+
+    def submit_for_entity(
+        self, entity_type: str, entity_slug: str, payload: ReviewCreate, customer_id: int
+    ) -> dict[str, Any]:
+        public_id = f"REV-{self._reviews.count() + 2001}"
+        now = utc_now()
+        self._reviews.create_entity_review(
+            {
+                "public_id": public_id,
+                "customer_id": customer_id,
+                "entity_type": entity_type,
+                "entity_slug": entity_slug,
+                "rating": payload.rating,
+                "title": payload.title,
+                "body": payload.body,
+                "trip_date": payload.trip_date,
+                "media_urls": payload.media_urls,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        return {"id": public_id, "status": "approved"}
+
     def delete(self, public_id: str, customer_id: int) -> dict[str, str]:
         review = self._reviews.find_by_public_id(public_id)
         if not review:

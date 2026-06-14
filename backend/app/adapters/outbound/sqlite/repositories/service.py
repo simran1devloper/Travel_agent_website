@@ -38,13 +38,13 @@ class SQLiteServiceRepository(IServiceRepository):
             conn.execute(
                 """INSERT INTO services (
                      id, name, category, short_description, description, detailed_description,
-                     image_url, icon_url, image_alt, rating, review_count, highlight, badge_text,
-                     cta_text, cta_link, show_homepage, show_services_page, show_hero_card,
-                     show_footer, status, gallery, sort_order, created_at, updated_at
+                     image_url, icon_url, image_alt, price, rating, review_count, highlight,
+                     badge_text, cta_text, cta_link, show_homepage, show_services_page,
+                     show_hero_card, show_footer, status, gallery, sort_order, created_at, updated_at
                    )
                    VALUES (
                      :id, :name, :category, :short_description, :description, :detailed_description,
-                     :image_url, :icon_url, :image_alt, :rating, :review_count, :highlight,
+                     :image_url, :icon_url, :image_alt, :price, :rating, :review_count, :highlight,
                      :badge_text, :cta_text, :cta_link, :show_homepage, :show_services_page,
                      :show_hero_card, :show_footer, :status, :gallery, :sort_order,
                      :created_at, :updated_at
@@ -58,6 +58,7 @@ class SQLiteServiceRepository(IServiceRepository):
                      image_url=excluded.image_url,
                      icon_url=excluded.icon_url,
                      image_alt=excluded.image_alt,
+                     price=excluded.price,
                      rating=excluded.rating,
                      review_count=excluded.review_count,
                      highlight=excluded.highlight,
@@ -82,6 +83,7 @@ class SQLiteServiceRepository(IServiceRepository):
                     "image_url": data.get("image_url", ""),
                     "icon_url": data.get("icon_url", ""),
                     "image_alt": data.get("image_alt", ""),
+                    "price": data.get("price"),
                     "rating": data.get("rating", 5.0),
                     "review_count": data.get("review_count", 0),
                     "highlight": data.get("highlight", ""),
@@ -113,6 +115,7 @@ class SQLiteServiceRepository(IServiceRepository):
             "image_url",
             "icon_url",
             "image_alt",
+            "price",
             "rating",
             "review_count",
             "highlight",
@@ -123,8 +126,9 @@ class SQLiteServiceRepository(IServiceRepository):
             "sort_order",
         )
         bool_keys = ("show_homepage", "show_services_page", "show_hero_card", "show_footer")
+        nullable_keys = {"price"}
         for key in scalar_keys:
-            if key in data and data[key] is not None:
+            if key in data and (data[key] is not None or key in nullable_keys):
                 fields.append(f"{key} = ?")
                 params.append(data[key])
         for key in bool_keys:

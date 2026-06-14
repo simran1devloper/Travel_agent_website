@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useLocalAuth } from "@/components/auth-provider";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from "react";
 import { useAdminTabPref } from "@/lib/user-prefs";
 import { PageShell } from "@/components/page-shell";
 import { StarRating } from "@/components/star-rating";
@@ -26,8 +26,12 @@ import {
   type ApiOffer,
   type OfferPayload,
   type AdminImportResult,
+  type ApiInquiry,
+  type ApiComment,
 } from "@/lib/api";
 import { AUTH0_ENABLED } from "@/lib/auth-config";
+import { useStorageBackend } from "@/hooks/useStorageBackend";
+import { StorageBackendPicker } from "@/components/storage-backend-picker";
 import {
   Upload,
   Download,
@@ -53,6 +57,7 @@ import {
   SquareCheck,
   Square,
   ShieldAlert,
+  Loader2,
 } from "lucide-react";
 
 const PACKAGE_MEDIA_BY_SLUG: Record<string, string> = {
@@ -535,11 +540,14 @@ type AdminTab =
   | "services"
   | "media"
   | "reviews"
+  | "comments"
   | "planners"
   | "content"
   | "offers"
+  | "inquiries"
   | "contact"
-  | "pages";
+  | "pages"
+  | "settings";
 
 function AdminPage() {
   const { localUser } = useLocalAuth();
@@ -625,15 +633,18 @@ function AdminContent() {
 
   const tabs: { key: AdminTab; label: string }[] = [
     { key: "overview", label: "Overview" },
+    { key: "inquiries", label: "Inquiries" },
     { key: "packages", label: "Packages" },
     { key: "services", label: "Services" },
     { key: "content", label: "Content" },
     { key: "media", label: "Media" },
     { key: "reviews", label: "Reviews" },
+    { key: "comments", label: "Comments" },
     { key: "planners", label: "Planners" },
     { key: "offers", label: "Offers" },
     { key: "pages", label: "Pages" },
     { key: "contact", label: "Contact" },
+    { key: "settings", label: "Settings" },
   ];
 
   return (
@@ -657,15 +668,18 @@ function AdminContent() {
       </div>
 
       {activeTab === "overview" && <OverviewTab />}
+      {activeTab === "inquiries" && <InquiriesTab />}
       {activeTab === "packages" && <PackagesTab />}
       {activeTab === "services" && <ServicesTab />}
       {activeTab === "content" && <ContentTab />}
       {activeTab === "media" && <MediaTab />}
       {activeTab === "reviews" && <ReviewsTab />}
+      {activeTab === "comments" && <CommentsTab />}
       {activeTab === "planners" && <PlannersTab />}
       {activeTab === "offers" && <OffersTab />}
       {activeTab === "pages" && <PagesTab />}
       {activeTab === "contact" && <ContactTab />}
+      {activeTab === "settings" && <SettingsTab />}
     </PageShell>
   );
 }
@@ -695,10 +709,15 @@ function OverviewTab() {
         days: Number(f.days),
         price: Number(f.price),
         category: f.category.trim() || undefined,
-        image_url: f.image_url.trim() || undefined,
+        image_url: f.image_url.trim() || (f.media_urls[0] ?? undefined),
         tagline: f.tagline.trim() || undefined,
         description: f.description.trim() || undefined,
         published: f.published,
+        card_type: f.card_type,
+        destination_slugs: f.destination_slugs,
+        service_ids: f.service_ids,
+        offer_ids: f.offer_ids,
+        media_urls: f.media_urls,
       };
       return pkgModal?.mode === "edit"
         ? api.adminUpdatePackage(f.slug, payload)
@@ -1158,6 +1177,254 @@ function OverviewTab() {
   );
 }
 
+// ── Inquiries tab ─────────────────────────────────────────────────────────────
+
+function InquiriesTab() {
+  const qc = useQueryClient();
+  const inquiriesQuery = useQuery({ queryKey: ["admin-inquiries"], queryFn: api.adminInquiries });
+  const plannersQuery = useQuery({ queryKey: ["planners"], queryFn: api.listPlanners });
+  const inquiries = inquiriesQuery.data ?? [];
+  const planners = plannersQuery.data ?? [];
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [detail, setDetail] = useState<ApiInquiry | null>(null);
+
+  const filtered = inquiries.filter((inq) => {
+    const hay = `${inq.full_name} ${inq.email} ${inq.public_id} ${(inq.destinations ?? []).join(" ")}`.toLowerCase();
+    const matchSearch = hay.includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || inq.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const bulk = useBulkSelect(filtered, (i) => i.public_id);
+
+  const updateInquiry = useMutation({
+    mutationFn: ({ id, status, plannerId }: { id: string; status?: string; plannerId?: number | null }) =>
+      fetch(`${API_BASE_URL}/admin/inquiries/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-admin-token": "dev-admin-token" },
+        body: JSON.stringify({ status, assigned_planner_id: plannerId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-inquiries"] }),
+  });
+
+  const bulkUpdate = useMutation({
+    mutationFn: ({ status }: { status: string }) =>
+      api.adminBulkUpdateInquiries(Array.from(bulk.selected), status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-inquiries"] });
+      bulk.clearSelection();
+    },
+  });
+
+  const STATUS_OPTIONS = ["New", "Assigned", "In review", "Quoted", "Won", "Lost"];
+  const STATUS_COLORS: Record<string, string> = {
+    New: "bg-blue-100 text-blue-700",
+    Assigned: "bg-amber-100 text-amber-700",
+    "In review": "bg-purple-100 text-purple-700",
+    Quoted: "bg-cyan-100 text-cyan-700",
+    Won: "bg-green-100 text-green-700",
+    Lost: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div className="space-y-6">
+      <SessionBanner error={inquiriesQuery.error as Error | null} />
+
+      {/* Header */}
+      <div className="rounded-2xl border border-border bg-[#fbf6ee] p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-black">Inquiries</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {inquiries.length} total · {inquiries.filter((i) => i.status === "New").length} new
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm">
+              <Search className="size-3.5 text-muted-foreground" />
+              <input
+                placeholder="Search…"
+                className="bg-transparent outline-none w-40"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-full border border-border bg-background px-4 py-2 text-xs font-bold focus:outline-none"
+            >
+              <option value="all">All statuses</option>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <button
+              type="button"
+              onClick={() => api.adminExportInquiriesCsv()}
+              className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-bold hover:bg-secondary"
+            >
+              <Download className="size-3" /> Export CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulk bar */}
+      <BulkBar count={bulk.selected.size} onClear={bulk.clearSelection}>
+        <span className="text-xs text-muted-foreground">Set status:</span>
+        {STATUS_OPTIONS.map((s) => (
+          <button
+            key={s}
+            type="button"
+            disabled={bulkUpdate.isPending}
+            onClick={() => bulkUpdate.mutate({ status: s })}
+            className="rounded-full border border-border px-3 py-1 text-xs font-bold hover:bg-secondary disabled:opacity-50"
+          >
+            {s}
+          </button>
+        ))}
+      </BulkBar>
+
+      {/* Table */}
+      <div className="rounded-2xl border border-border overflow-hidden">
+        <div className="hidden md:grid grid-cols-12 gap-2 px-5 py-3 bg-secondary text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+          <div className="col-span-1 flex items-center">
+            <RowCheck checked={bulk.allSelected} onToggle={bulk.toggleAll} />
+          </div>
+          <div className="col-span-2">ID</div>
+          <div className="col-span-2">Name</div>
+          <div className="col-span-1">Email</div>
+          <div className="col-span-1">Dest.</div>
+          <div className="col-span-1">Budget</div>
+          <div className="col-span-2">Status</div>
+          <div className="col-span-2">Planner</div>
+        </div>
+        {filtered.length === 0 && (
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground">No inquiries found.</p>
+        )}
+        {filtered.map((inq, i) => (
+          <div
+            key={inq.public_id}
+            className={`grid grid-cols-2 md:grid-cols-12 gap-2 px-5 py-4 items-center text-sm ${i > 0 ? "border-t border-border" : ""} ${bulk.selected.has(inq.public_id) ? "bg-accent/5" : "hover:bg-secondary/40"}`}
+          >
+            <div className="hidden md:flex md:col-span-1 items-center" onClick={(e) => e.stopPropagation()}>
+              <RowCheck checked={bulk.selected.has(inq.public_id)} onToggle={() => bulk.toggleOne(inq.public_id)} />
+            </div>
+            <button
+              type="button"
+              className="md:col-span-2 font-mono text-xs text-left text-accent hover:underline"
+              onClick={() => setDetail(inq)}
+            >
+              {inq.public_id}
+            </button>
+            <div className="md:col-span-2 font-medium">{inq.full_name}</div>
+            <div className="md:col-span-1 text-xs text-muted-foreground truncate">{inq.email}</div>
+            <div className="md:col-span-1 text-xs text-muted-foreground truncate">
+              {inq.destinations?.[0] ?? "—"}
+            </div>
+            <div className="md:col-span-1 text-xs text-muted-foreground">{inq.budget ?? "TBD"}</div>
+            <div className="md:col-span-2" onClick={(e) => e.stopPropagation()}>
+              <select
+                defaultValue={inq.status}
+                onChange={(e) => updateInquiry.mutate({ id: inq.public_id, status: e.target.value })}
+                className="text-[10px] font-mono uppercase tracking-widest rounded-full px-2.5 py-1 border border-border bg-background focus:outline-none"
+              >
+                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="md:col-span-2" onClick={(e) => e.stopPropagation()}>
+              <select
+                value={inq.assigned_planner_id ?? ""}
+                onChange={(e) => updateInquiry.mutate({ id: inq.public_id, plannerId: e.target.value ? Number(e.target.value) : null })}
+                className="w-full text-xs rounded-xl border border-border bg-background px-3 py-1.5 focus:outline-none focus:border-accent"
+              >
+                <option value="">Unassigned</option>
+                {planners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail drawer */}
+      {detail && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" onClick={() => setDetail(null)}>
+          <aside
+            className="absolute right-0 top-0 h-full w-full max-w-lg overflow-y-auto bg-background shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-4 backdrop-blur">
+              <div>
+                <p className="text-xs font-black uppercase text-accent">Inquiry Detail</p>
+                <h3 className="text-xl font-black">{detail.public_id}</h3>
+              </div>
+              <button type="button" onClick={() => setDetail(null)} className="rounded-full border border-border p-2">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div className="rounded-xl border border-border p-4 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="font-bold">{detail.full_name}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_COLORS[detail.status] ?? "bg-secondary text-foreground"}`}>{detail.status}</span>
+                </div>
+                <p className="text-muted-foreground">{detail.email}</p>
+                <p className="text-xs text-muted-foreground">{new Date(detail.created_at).toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-border p-4 space-y-2 text-sm">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Destinations</p>
+                <div className="flex flex-wrap gap-2">
+                  {(detail.destinations ?? []).map((d) => (
+                    <span key={d} className="rounded-full bg-secondary px-3 py-1 text-xs">{d}</span>
+                  ))}
+                  {!detail.destinations?.length && <span className="text-muted-foreground text-xs">None specified</span>}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border p-4 text-sm">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Budget</p>
+                <p>{detail.budget ?? "Not specified"}</p>
+              </div>
+              <div className="rounded-xl border border-border p-4 space-y-3 text-sm">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Assign Planner</p>
+                <select
+                  value={detail.assigned_planner_id ?? ""}
+                  onChange={(e) => {
+                    updateInquiry.mutate({ id: detail.public_id, plannerId: e.target.value ? Number(e.target.value) : null });
+                    setDetail({ ...detail, assigned_planner_id: e.target.value ? Number(e.target.value) : null });
+                  }}
+                  className="w-full rounded-xl border border-border bg-background px-3 py-2 focus:outline-none focus:border-accent"
+                >
+                  <option value="">Unassigned</option>
+                  {planners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="rounded-xl border border-border p-4 space-y-2 text-sm">
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2">Update Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {STATUS_OPTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        updateInquiry.mutate({ id: detail.public_id, status: s });
+                        setDetail({ ...detail, status: s });
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs font-bold border transition-colors ${detail.status === s ? (STATUS_COLORS[s] ?? "bg-secondary") + " border-transparent" : "border-border hover:bg-secondary"}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Packages & Destinations tab ───────────────────────────────────────────────
 
 type PkgForm = {
@@ -1171,7 +1438,13 @@ type PkgForm = {
   tagline: string;
   description: string;
   published: boolean;
+  card_type: "normal" | "pomplate";
+  destination_slugs: string[];
+  service_ids: number[];
+  offer_ids: number[];
+  media_urls: string[];
 };
+type DestGalleryItem = { type: "photo" | "video"; src: string; caption: string; author: string };
 type DestForm = {
   slug: string;
   name: string;
@@ -1180,6 +1453,7 @@ type DestForm = {
   duration: string;
   price: string;
   packages_count: string;
+  gallery: DestGalleryItem[];
 };
 
 const emptyPkg = (): PkgForm => ({
@@ -1193,6 +1467,11 @@ const emptyPkg = (): PkgForm => ({
   tagline: "",
   description: "",
   published: true,
+  card_type: "normal",
+  destination_slugs: [],
+  service_ids: [],
+  offer_ids: [],
+  media_urls: [],
 });
 const emptyDest = (): DestForm => ({
   slug: "",
@@ -1202,6 +1481,7 @@ const emptyDest = (): DestForm => ({
   duration: "",
   price: "",
   packages_count: "0",
+  gallery: [],
 });
 
 function packageToForm(pkg: ApiPackage): PkgForm {
@@ -1216,6 +1496,11 @@ function packageToForm(pkg: ApiPackage): PkgForm {
     tagline: pkg.tagline ?? "",
     description: pkg.description ?? "",
     published: pkg.published !== false,
+    card_type: pkg.card_type ?? "normal",
+    destination_slugs: pkg.destination_slugs ?? [],
+    service_ids: pkg.service_ids ?? [],
+    offer_ids: pkg.offer_ids ?? [],
+    media_urls: pkg.media_urls ?? [],
   };
 }
 
@@ -1265,10 +1550,15 @@ function PackagesTab() {
         days: Number(f.days),
         price: Number(f.price),
         category: f.category || undefined,
-        image_url: f.image_url || undefined,
+        image_url: f.image_url || (f.media_urls[0] ?? undefined),
         tagline: f.tagline || undefined,
         description: f.description || undefined,
         published: f.published,
+        card_type: f.card_type,
+        destination_slugs: f.destination_slugs,
+        service_ids: f.service_ids,
+        offer_ids: f.offer_ids,
+        media_urls: f.media_urls,
       };
       return pkgModal?.mode === "edit"
         ? api.adminUpdatePackage(f.slug, payload)
@@ -1291,6 +1581,49 @@ function PackagesTab() {
   // ── Destinations state ──
   const destsQuery = useQuery({ queryKey: ["destinations"], queryFn: api.destinations });
   const dests = destsQuery.data ?? [];
+  const servicesQueryPkg = useQuery({ queryKey: ["services"], queryFn: api.services });
+  const allServicesPkg = servicesQueryPkg.data ?? [];
+  const offersQueryPkg = useQuery({ queryKey: ["offers"], queryFn: api.offers });
+  const allOffersPkg = offersQueryPkg.data ?? [];
+
+  // ── Package-link redirect helpers ──────────────────────────────────────────
+  // When the admin clicks "Go to Services/Offers tab to add a new item", we save
+  // the current package form to sessionStorage so PackagesTab can restore it when
+  // the user switches back after creating the new item.
+  const PKG_LINK_KEY = "jm_pkg_link_pending";
+  type PkgLinkPending = {
+    pkgMode: "add" | "edit";
+    pkgForm: PkgForm;
+    linkType: "service" | "offer";
+    linkedServiceId?: number;
+    linkedOfferId?: number;
+  };
+
+  const [, setActiveTabFromPkg] = useAdminTabPref();
+
+  // On mount, check if we just returned from Services/Offers tab after creating an item
+  useEffect(() => {
+    const raw = sessionStorage.getItem(PKG_LINK_KEY);
+    if (!raw) return;
+    try {
+      const pending: PkgLinkPending = JSON.parse(raw);
+      if (pending.linkedServiceId !== undefined || pending.linkedOfferId !== undefined) {
+        sessionStorage.removeItem(PKG_LINK_KEY);
+        const restored = { ...pending.pkgForm };
+        if (pending.linkedServiceId !== undefined)
+          restored.service_ids = [...restored.service_ids, pending.linkedServiceId];
+        if (pending.linkedOfferId !== undefined)
+          restored.offer_ids = [...restored.offer_ids, pending.linkedOfferId];
+        setPkgModal({ mode: pending.pkgMode, data: restored });
+        setSection("packages");
+      }
+    } catch { /* ignore malformed */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ref to hold pkg form when doing same-tab dest redirect
+  const pendingDestLinkRef = useRef<{ mode: "add" | "edit"; form: PkgForm } | null>(null);
+
   const [destModal, setDestModal] = useState<{ mode: "add" | "edit"; data: DestForm } | null>(null);
   const [destDeleteSlug, setDestDeleteSlug] = useState<string | null>(null);
 
@@ -1299,19 +1632,30 @@ function PackagesTab() {
       const payload: DestinationPayload = {
         slug: f.slug,
         name: f.name,
-        image_url: f.image_url || undefined,
+        image_url: f.image_url || (f.gallery[0]?.src) || undefined,
         tagline: f.tagline || undefined,
         duration: f.duration || undefined,
         price: f.price ? Number(f.price) : undefined,
         packages_count: Number(f.packages_count) || 0,
+        gallery: f.gallery.length > 0 ? f.gallery : undefined,
       };
       return destModal?.mode === "edit"
         ? api.adminUpdateDestination(f.slug, payload)
         : api.adminCreateDestination(payload);
     },
-    onSuccess: () => {
+    onSuccess: (newDest) => {
       qc.invalidateQueries({ queryKey: ["destinations"] });
       setDestModal(null);
+      // If we came from "Add new destination" inside the package modal, restore it
+      if (pendingDestLinkRef.current && destModal?.mode === "add") {
+        const { mode, form } = pendingDestLinkRef.current;
+        pendingDestLinkRef.current = null;
+        setPkgModal({
+          mode,
+          data: { ...form, destination_slugs: [...form.destination_slugs, newDest.slug] },
+        });
+        setSection("packages");
+      }
     },
   });
 
@@ -1653,6 +1997,7 @@ function PackagesTab() {
                         duration: dest.duration ?? "",
                         price: dest.price ? String(dest.price) : "",
                         packages_count: String(dest.packages_count),
+                        gallery: (dest.gallery ?? []) as DestGalleryItem[],
                       },
                     })
                   }
@@ -1782,7 +2127,7 @@ function PackagesTab() {
                     placeholder="4999"
                   />
                 </AdminField>
-                <AdminField label="Image or video URL" className="sm:col-span-2">
+                <AdminField label="Cover image / video" className="sm:col-span-2">
                   <PackageMediaUpload
                     imageUrl={pkgModal.data.image_url}
                     slug={pkgModal.data.slug || pkgModal.data.title || "package"}
@@ -1802,6 +2147,59 @@ function PackagesTab() {
                     placeholder="https://example.com/photo.jpg or https://example.com/reel.mp4"
                   />
                 </AdminField>
+
+                {/* Additional gallery media */}
+                <div className="sm:col-span-2">
+                  <p className="mb-1.5 text-xs font-semibold text-foreground">Gallery (additional photos &amp; videos)</p>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Upload or paste links for extra images/videos shown in the package gallery. The first entry also auto-fills the cover if left blank.
+                  </p>
+                  {pkgModal.data.media_urls.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {pkgModal.data.media_urls.map((url, i) => (
+                        <div key={url} className="group relative h-20 w-28 overflow-hidden rounded-lg border border-border bg-secondary">
+                          {/\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url) ? (
+                            <div className="flex h-full items-center justify-center">
+                              <Video className="size-6 text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <img src={resolveAdminMediaUrl(url, pkgModal.data.slug || "pkg", "200/150")} alt="" className="h-full w-full object-cover" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPkgModal((m) => m && {
+                                ...m,
+                                data: { ...m.data, media_urls: m.data.media_urls.filter((_, idx) => idx !== i) },
+                              })
+                            }
+                            className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-0.5 text-white group-hover:flex"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <DestinationGalleryUpload
+                    slug={pkgModal.data.slug || "package"}
+                    onAdded={(urls) =>
+                      setPkgModal((m) => {
+                        if (!m) return m;
+                        const merged = [...m.data.media_urls, ...urls];
+                        return {
+                          ...m,
+                          data: {
+                            ...m.data,
+                            media_urls: merged,
+                            image_url: m.data.image_url || merged[0] || "",
+                          },
+                        };
+                      })
+                    }
+                  />
+                </div>
+
                 <AdminField label="Tagline" className="sm:col-span-2">
                   <input
                     value={pkgModal.data.tagline}
@@ -1841,6 +2239,177 @@ function PackagesTab() {
                     />
                     <span className="text-sm font-semibold">Published (visible to customers)</span>
                   </label>
+                </AdminField>
+
+                {/* Card type */}
+                <AdminField label="Card type" className="sm:col-span-2">
+                  <div className="flex gap-3">
+                    {(["normal", "pomplate"] as const).map((ct) => (
+                      <label key={ct} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-4 py-2.5 ${pkgModal.data.card_type === ct ? "border-accent bg-accent/5" : "border-border"}`}>
+                        <input
+                          type="radio"
+                          name="card_type"
+                          value={ct}
+                          checked={pkgModal.data.card_type === ct}
+                          onChange={() => setPkgModal((m) => m && { ...m, data: { ...m.data, card_type: ct } })}
+                          className="accent-accent"
+                        />
+                        <span className="text-sm font-semibold capitalize">{ct}</span>
+                        {ct === "pomplate" && <span className="text-xs text-muted-foreground">(template layout)</span>}
+                      </label>
+                    ))}
+                  </div>
+                </AdminField>
+
+                {/* Linked destinations */}
+                <AdminField label="Linked destinations" className="sm:col-span-2">
+                  <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-white p-3 space-y-1.5">
+                    {dests.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No destinations yet.</p>
+                    ) : dests.map((dest) => {
+                      const checked = pkgModal.data.destination_slugs.includes(dest.slug);
+                      return (
+                        <label key={dest.slug} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 hover:bg-secondary/50">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setPkgModal((m) => m && {
+                                ...m,
+                                data: {
+                                  ...m.data,
+                                  destination_slugs: checked
+                                    ? m.data.destination_slugs.filter((s) => s !== dest.slug)
+                                    : [...m.data.destination_slugs, dest.slug],
+                                },
+                              })
+                            }
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <span className="text-sm font-medium">{dest.name}</span>
+                          <span className="text-xs text-muted-foreground">({dest.slug})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Save current pkg form, switch to Destinations section, open full add form
+                      pendingDestLinkRef.current = { mode: pkgModal.mode, form: pkgModal.data };
+                      setPkgModal(null);
+                      setSection("destinations");
+                      setDestModal({ mode: "add", data: emptyDest() });
+                    }}
+                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+                  >
+                    <Plus className="size-3.5" /> Add new destination
+                  </button>
+                </AdminField>
+
+                {/* Linked services */}
+                <AdminField label="Linked services" className="sm:col-span-2">
+                  <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-white p-3 space-y-1.5">
+                    {allServicesPkg.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No services yet.</p>
+                    ) : allServicesPkg.map((svc) => {
+                      const svcId = Number(svc.id);
+                      const checked = pkgModal.data.service_ids.includes(svcId);
+                      return (
+                        <label key={svc.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 hover:bg-secondary/50">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setPkgModal((m) => m && {
+                                ...m,
+                                data: {
+                                  ...m.data,
+                                  service_ids: checked
+                                    ? m.data.service_ids.filter((id) => id !== svcId)
+                                    : [...m.data.service_ids, svcId],
+                                },
+                              })
+                            }
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <span className="text-sm font-medium">{svc.name}</span>
+                          {svc.category && <span className="text-xs text-muted-foreground">{svc.category}</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Save pkg form to sessionStorage, switch to Services tab (full form)
+                      const pending: PkgLinkPending = {
+                        pkgMode: pkgModal.mode,
+                        pkgForm: pkgModal.data,
+                        linkType: "service",
+                      };
+                      sessionStorage.setItem(PKG_LINK_KEY, JSON.stringify(pending));
+                      setPkgModal(null);
+                      setActiveTabFromPkg("services");
+                    }}
+                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+                  >
+                    <Plus className="size-3.5" /> Add new service
+                  </button>
+                </AdminField>
+
+                {/* Linked offers */}
+                <AdminField label="Linked offers" className="sm:col-span-2">
+                  <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-white p-3 space-y-1.5">
+                    {allOffersPkg.length === 0 ? (
+                      <p className="text-xs text-muted-foreground italic">No offers yet.</p>
+                    ) : allOffersPkg.map((offer) => {
+                      const checked = pkgModal.data.offer_ids.includes(offer.id);
+                      return (
+                        <label key={offer.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-0.5 hover:bg-secondary/50">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setPkgModal((m) => m && {
+                                ...m,
+                                data: {
+                                  ...m.data,
+                                  offer_ids: checked
+                                    ? m.data.offer_ids.filter((id) => id !== offer.id)
+                                    : [...m.data.offer_ids, offer.id],
+                                },
+                              })
+                            }
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <span className="text-sm font-medium">{offer.title}</span>
+                          {offer.badge_label && (
+                            <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                              {offer.badge_label}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Save pkg form to sessionStorage, switch to Offers tab (full form)
+                      const pending: PkgLinkPending = {
+                        pkgMode: pkgModal.mode,
+                        pkgForm: pkgModal.data,
+                        linkType: "offer",
+                      };
+                      sessionStorage.setItem(PKG_LINK_KEY, JSON.stringify(pending));
+                      setPkgModal(null);
+                      setActiveTabFromPkg("offers");
+                    }}
+                    className="mt-2 flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+                  >
+                    <Plus className="size-3.5" /> Add new offer
+                  </button>
                 </AdminField>
               </div>
               {savePkg.isError && (
@@ -1951,7 +2520,7 @@ function PackagesTab() {
                     placeholder="2999"
                   />
                 </AdminField>
-                <AdminField label="Image URL" className="sm:col-span-2">
+                <AdminField label="Cover Image URL" className="sm:col-span-2">
                   <input
                     value={destModal.data.image_url}
                     onChange={(e) =>
@@ -1960,9 +2529,60 @@ function PackagesTab() {
                       )
                     }
                     className="admin-input"
-                    placeholder="https://… or /assets/image.jpg"
+                    placeholder="https://… or /uploads/image.jpg (auto-set from first gallery upload)"
                   />
                 </AdminField>
+                <div className="sm:col-span-2">
+                  <p className="mb-2 text-xs font-semibold text-foreground">Gallery (images &amp; videos)</p>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Upload 1 or more photos/videos. The first upload will also set the cover image if none is specified.
+                  </p>
+                  {destModal.data.gallery.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {destModal.data.gallery.map((item, i) => (
+                        <div key={item.src} className="group relative h-20 w-28 overflow-hidden rounded-lg border border-border bg-secondary">
+                          {item.type === "video" ? (
+                            <div className="flex h-full items-center justify-center">
+                              <Video className="size-6 text-muted-foreground" />
+                            </div>
+                          ) : (
+                            <img src={resolveAdminMediaUrl(item.src, destModal.data.slug || "dest", "200/150")} alt="" className="h-full w-full object-cover" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setDestModal((m) => m && { ...m, data: { ...m.data, gallery: m.data.gallery.filter((_, idx) => idx !== i) } })}
+                            className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-0.5 text-white group-hover:flex"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <DestinationGalleryUpload
+                    slug={destModal.data.slug || "destination"}
+                    onAdded={(urls) => {
+                      const newItems: DestGalleryItem[] = urls.map((url) => ({
+                        type: /\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url) ? "video" : "photo",
+                        src: url,
+                        caption: "",
+                        author: "",
+                      }));
+                      setDestModal((m) => {
+                        if (!m) return m;
+                        const merged = [...m.data.gallery, ...newItems];
+                        return {
+                          ...m,
+                          data: {
+                            ...m.data,
+                            gallery: merged,
+                            image_url: m.data.image_url || merged[0]?.src || "",
+                          },
+                        };
+                      });
+                    }}
+                  />
+                </div>
                 <AdminField label="Tagline" className="sm:col-span-2">
                   <input
                     value={destModal.data.tagline}
@@ -2269,13 +2889,16 @@ function PackageMediaUpload({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const previewUrl = imageUrl ? resolveAdminMediaUrl(imageUrl, slug, "600/400") : "";
+  const { selected, setSelected, backends, configuredKeys, resolveBackend, pendingConfirm } = useStorageBackend();
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setError("");
+    const resolvedBackend = await resolveBackend();
+    if (resolvedBackend === null) return; // user cancelled
     setUploading(true);
     try {
-      const uploaded = await api.adminUploadMedia(file, title);
+      const uploaded = await api.adminUploadMedia(file, title, resolvedBackend);
       onUploaded(uploaded.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed. Please try another file.");
@@ -2301,9 +2924,17 @@ function PackageMediaUpload({
         )}
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">Upload from local storage</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Choose a JPG, PNG, WebP, MP4, or MOV file. The uploaded URL will be added below.
+          <p className="mb-2 text-sm font-bold">Upload file</p>
+          <StorageBackendPicker
+            selected={selected}
+            onChange={setSelected}
+            backends={backends}
+            configuredKeys={configuredKeys}
+            pendingConfirm={pendingConfirm}
+            className="mb-2"
+          />
+          <p className="text-xs leading-5 text-muted-foreground">
+            JPG, PNG, WebP, MP4, or MOV. The URL will be saved below.
           </p>
           {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -2335,7 +2966,7 @@ function PackageMediaUpload({
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => void handleFile(e.target.files?.[0])}
       />
     </div>
   );
@@ -2374,12 +3005,25 @@ function MediaTab() {
   const [assignType, setAssignType] = useState("package");
   const [assignSlug, setAssignSlug] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadBackend, setUploadBackend] = useState<string>("auto");
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [unconfiguredLabel, setUnconfiguredLabel] = useState<string | null>(null);
 
   const mediaQuery = useQuery({
     queryKey: ["admin-media", page],
     queryFn: () => api.adminListMedia(page),
   });
   const data = mediaQuery.data;
+
+  const { data: backendsData } = useQuery({
+    queryKey: ["storage-backends"],
+    queryFn: () =>
+      fetch(`${API_BASE_URL}/admin/storage/backends`, {
+        headers: { "x-admin-token": "dev-admin-token" },
+      }).then((r) => r.json() as Promise<{ backends: { key: string; label: string }[] }>),
+  });
+  const availableBackends = backendsData?.backends ?? [];
+  const configuredBackendKeys = new Set(availableBackends.map((b: { key: string }) => b.key));
 
   const updateMut = useMutation({
     mutationFn: ({
@@ -2401,12 +3045,19 @@ function MediaTab() {
     mutationFn: async (file: File) => {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("http://localhost:8000/media", {
+      const backend = uploadBackend === "auto" ? "" : uploadBackend;
+      const url = backend
+        ? `${API_BASE_URL}/media?storage_backend=${encodeURIComponent(backend)}`
+        : `${API_BASE_URL}/media`;
+      const res = await fetch(url, {
         method: "POST",
         headers: { "x-admin-token": "dev-admin-token" },
         body: form,
       });
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(err.detail ?? "Upload failed");
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-media"] }),
   });
@@ -2438,19 +3089,67 @@ function MediaTab() {
         >
           <Upload className="size-3" /> Upload media
         </button>
+        <select
+          value={uploadBackend}
+          onChange={(e) => setUploadBackend(e.target.value)}
+          title="Storage destination"
+          className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-accent"
+        >
+          <option value="auto">Auto (server default)</option>
+          {availableBackends.map((b) => (
+            <option key={b.key} value={b.key}>
+              {b.label}
+            </option>
+          ))}
+        </select>
         <input
           ref={fileRef}
           type="file"
           className="hidden"
-          accept="image/*,video/mp4,video/quicktime"
+          accept="image/*,video/mp4,video/quicktime,application/pdf,text/csv,.xlsx,.xls"
           multiple
           onChange={(e) => {
             if (!e.target.files) return;
-            for (const f of Array.from(e.target.files)) uploadMut.mutate(f);
+            const files = Array.from(e.target.files);
             e.target.value = "";
+            const effective = uploadBackend === "auto" ? "local" : uploadBackend;
+            if (effective !== "local" && !configuredBackendKeys.has(effective)) {
+              const labelMap: Record<string, string> = { gdrive: "Google Drive", r2: "Cloudflare R2" };
+              setUnconfiguredLabel(labelMap[effective] ?? effective);
+              setPendingFiles(files);
+            } else {
+              for (const f of files) uploadMut.mutate(f);
+            }
           }}
         />
       </SectionHeader>
+
+      {unconfiguredLabel && pendingFiles && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <span className="flex-1 text-sm font-semibold text-amber-800">
+            {unconfiguredLabel} is not configured. Upload to local storage instead?
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              for (const f of pendingFiles) uploadMut.mutate(f);
+              setPendingFiles(null); setUnconfiguredLabel(null);
+            }}
+            className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600"
+          >Yes, use local</button>
+          <button
+            type="button"
+            onClick={() => { setPendingFiles(null); setUnconfiguredLabel(null); }}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary"
+          >Cancel</button>
+        </div>
+      )}
+
+      {uploadMut.isError && (
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Upload failed: {uploadMut.error instanceof Error ? uploadMut.error.message : "Unknown error"}
+        </div>
+      )}
 
       {mediaQuery.isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -3114,6 +3813,129 @@ function ReviewModerationCard({
   );
 }
 
+// ── Comments tab ──────────────────────────────────────────────────────────────
+
+const COMMENT_STATUS_FILTERS = ["all", "pending", "approved", "rejected"] as const;
+
+function CommentsTab() {
+  const qc = useQueryClient();
+  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+
+  const commentsQuery = useQuery({
+    queryKey: ["admin-comments", filter],
+    queryFn: () => api.adminListComments(filter === "all" ? undefined : filter),
+  });
+  const comments = commentsQuery.data ?? [];
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.adminUpdateComment(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-comments"] }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: api.adminDeleteComment,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-comments"] }),
+  });
+
+  const STATUS_COLORS: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    approved: "bg-green-100 text-green-800",
+    rejected: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-bold">Comments</h2>
+        <div className="flex gap-2">
+          {COMMENT_STATUS_FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-4 py-1.5 text-xs font-bold capitalize transition-all ${
+                filter === f
+                  ? "bg-foreground text-background"
+                  : "border border-border hover:border-foreground"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {commentsQuery.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading...
+        </div>
+      ) : comments.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No comments found.</p>
+      ) : (
+        <div className="space-y-3">
+          {comments.map((c) => (
+            <div key={c.public_id} className="rounded-2xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <span className="font-semibold text-sm">{c.name}</span>
+                    {c.email && (
+                      <span className="text-xs text-muted-foreground">{c.email}</span>
+                    )}
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_COLORS[c.status] ?? "bg-secondary text-foreground"}`}>
+                      {c.status}
+                    </span>
+                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                      {c.entity_type} / {c.entity_slug}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{c.body}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {new Date(c.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  {c.status !== "approved" && (
+                    <button
+                      type="button"
+                      onClick={() => updateMut.mutate({ id: c.public_id, status: "approved" })}
+                      disabled={updateMut.isPending}
+                      className="rounded-lg bg-green-100 px-3 py-1.5 text-xs font-bold text-green-800 hover:bg-green-200 disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {c.status !== "rejected" && (
+                    <button
+                      type="button"
+                      onClick={() => updateMut.mutate({ id: c.public_id, status: "rejected" })}
+                      disabled={updateMut.isPending}
+                      className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-200 disabled:opacity-50"
+                    >
+                      Reject
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Delete this comment?")) deleteMut.mutate(c.public_id);
+                    }}
+                    disabled={deleteMut.isPending}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold hover:bg-secondary disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Planners tab ──────────────────────────────────────────────────────────────
 
 const EMPTY_PLANNER: PlannerPayload = { name: "", email: "", specialty: "", photo_url: "" };
@@ -3546,6 +4368,7 @@ function serviceToForm(service?: ApiService): ServicePayload {
       service?.image_url ?? service?.gallery?.find((item) => item.type === "photo")?.src ?? "",
     icon_url: service?.icon_url ?? "",
     image_alt: service?.image_alt ?? service?.name ?? "",
+    price: service?.price ?? undefined,
     rating: service?.rating ?? 5,
     review_count: service?.review_count ?? 0,
     highlight: service?.highlight ?? "",
@@ -3564,6 +4387,7 @@ function serviceToForm(service?: ApiService): ServicePayload {
 
 function ServicesTab() {
   const qc = useQueryClient();
+  const [, setActiveTab] = useAdminTabPref();
   const servicesQ = useQuery({ queryKey: ["services"], queryFn: api.services });
   const services = servicesQ.data ?? [];
   const [query, setQuery] = useState("");
@@ -3573,6 +4397,23 @@ function ServicesTab() {
   const [editing, setEditing] = useState<ServicePayload | null>(null);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const bulk = useBulkSelect(services, (s) => s.id);
+
+  // Check if we arrived here via "Add new service" from a package modal
+  const PKG_LINK_KEY = "jm_pkg_link_pending";
+  const pkgLinkPending: { linkType: string; pkgForm: { title?: string } } | null = (() => {
+    try {
+      const raw = sessionStorage.getItem(PKG_LINK_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return p.linkType === "service" && !p.linkedServiceId ? p : null;
+    } catch { return null; }
+  })();
+
+  // Auto-open create drawer when redirected from package modal
+  useEffect(() => {
+    if (pkgLinkPending) openCreate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const categories = Array.from(new Set(services.map((s) => s.category).filter(Boolean)));
   const filtered = services.filter((service) => {
@@ -3593,9 +4434,24 @@ function ServicesTab() {
   const saveService = useMutation({
     mutationFn: (payload: ServicePayload) =>
       drawerMode === "create" ? api.createService(payload) : api.updateService(payload.id, payload),
-    onSuccess: () => {
+    onSuccess: (newSvc) => {
       qc.invalidateQueries({ queryKey: ["services"] });
       setEditing(null);
+      // If we came from "Add new service" inside a package modal, link back and return
+      if (drawerMode === "create") {
+        try {
+          const raw = sessionStorage.getItem(PKG_LINK_KEY);
+          if (raw) {
+            const pending = JSON.parse(raw);
+            if (pending.linkType === "service" && !pending.linkedServiceId) {
+              pending.linkedServiceId = Number(newSvc.id);
+              sessionStorage.setItem(PKG_LINK_KEY, JSON.stringify(pending));
+              setActiveTab("packages");
+              return;
+            }
+          }
+        } catch { /* ignore */ }
+      }
     },
   });
   const deleteService = useMutation({
@@ -3628,6 +4484,13 @@ function ServicesTab() {
   return (
     <div className="space-y-6">
       <SessionBanner error={servicesQ.error as Error | null} />
+      {pkgLinkPending && (
+        <div className="rounded-2xl border border-accent/40 bg-accent/5 px-5 py-3 text-sm font-medium text-accent">
+          You're creating a service to link into package{" "}
+          <strong>{pkgLinkPending.pkgForm?.title || "your package"}</strong>.
+          Fill in the full details below and save — you'll be taken straight back to the package form.
+        </div>
+      )}
       <div className="rounded-2xl border border-border bg-[#fbf6ee] p-6 shadow-sm">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -3914,12 +4777,16 @@ function ServiceEditorDrawer({
   onClose: () => void;
   onSave: (payload: ServicePayload) => void;
 }) {
+  const { selected: assetBackend, setSelected: setAssetBackend, backends: assetBackends, configuredKeys: assetConfiguredKeys, resolveBackend: resolveAssetBackend, pendingConfirm: assetPendingConfirm } = useStorageBackend();
+
   function update<K extends keyof ServicePayload>(key: K, next: ServicePayload[K]) {
     onChange((current) => (current ? { ...current, [key]: next } : current));
   }
 
   async function uploadServiceAsset(file: File, key: "image_url" | "icon_url") {
-    const uploaded = await api.adminUploadMedia(file, value.name || value.id || "service");
+    const resolvedBackend = await resolveAssetBackend();
+    if (resolvedBackend === null) return;
+    const uploaded = await api.adminUploadMedia(file, value.name || value.id || "service", resolvedBackend);
     update(key, uploaded.url);
     if (key === "image_url" && !value.image_alt) update("image_alt", value.name);
   }
@@ -3956,6 +4823,13 @@ function ServiceEditorDrawer({
               value={value.category ?? ""}
               onChange={(v) => update("category", v)}
             />
+            <AdminNumberInput
+              label="Starting Price (₹, leave 0 for 'Contact us')"
+              value={value.price ?? 0}
+              min={0}
+              step={100}
+              onChange={(v) => update("price", v === 0 ? undefined : v)}
+            />
             <AdminTextInput
               label="Short Description"
               value={value.short_description ?? ""}
@@ -3971,16 +4845,26 @@ function ServiceEditorDrawer({
           </AdminFormSection>
 
           <AdminFormSection title="Media">
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-xs font-semibold text-muted-foreground">Upload destination</p>
+              <StorageBackendPicker
+                selected={assetBackend}
+                onChange={setAssetBackend}
+                backends={assetBackends}
+                configuredKeys={assetConfiguredKeys}
+                pendingConfirm={assetPendingConfirm}
+              />
+            </div>
             <ServiceAssetUpload
               label="Service Image Upload"
               url={value.image_url ?? ""}
-              onUpload={(file) => uploadServiceAsset(file, "image_url")}
+              onUpload={(file) => void uploadServiceAsset(file, "image_url")}
               onRemove={() => update("image_url", "")}
             />
             <ServiceAssetUpload
               label="Service Icon Upload"
               url={value.icon_url ?? ""}
-              onUpload={(file) => uploadServiceAsset(file, "icon_url")}
+              onUpload={(file) => void uploadServiceAsset(file, "icon_url")}
               onRemove={() => update("icon_url", "")}
             />
             <AdminTextInput
@@ -3992,6 +4876,48 @@ function ServiceEditorDrawer({
             <p className="text-xs font-semibold text-muted-foreground sm:col-span-2">
               Recommended image size: 1200 x 800 px.
             </p>
+
+            {/* Gallery — additional photos/videos */}
+            <div className="sm:col-span-2">
+              <p className="mb-1.5 text-xs font-semibold text-foreground">Gallery (additional photos &amp; videos)</p>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Upload or paste links for extra images/videos shown in the service detail gallery.
+              </p>
+              {(value.gallery ?? []).length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {(value.gallery ?? []).map((item, i) => (
+                    <div key={item.src} className="group relative h-20 w-28 overflow-hidden rounded-lg border border-border bg-secondary">
+                      {item.type === "video" ? (
+                        <div className="flex h-full items-center justify-center">
+                          <Video className="size-6 text-muted-foreground" />
+                        </div>
+                      ) : (
+                        <img src={resolveAdminMediaUrl(item.src, value.id ?? "svc", "200/150")} alt="" className="h-full w-full object-cover" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => update("gallery", (value.gallery ?? []).filter((_, idx) => idx !== i))}
+                        className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-0.5 text-white group-hover:flex"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <DestinationGalleryUpload
+                slug={value.id ?? "service"}
+                onAdded={(urls) => {
+                  const newItems = urls.map((url) => ({
+                    type: (/\.(mp4|mov|webm|m4v)(\?.*)?$/i.test(url) ? "video" : "photo") as "photo" | "video",
+                    src: url,
+                    caption: "",
+                    author: "",
+                  }));
+                  update("gallery", [...(value.gallery ?? []), ...newItems]);
+                }}
+              />
+            </div>
           </AdminFormSection>
 
           <AdminFormSection title="Trust / Marketing Content">
@@ -4476,6 +5402,7 @@ function FocusedContentEditor({
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const { selected: cmsBackend, setSelected: setCmsBackend, backends: cmsBackends, configuredKeys: cmsConfiguredKeys, resolveBackend: resolveCmsBackend, pendingConfirm: cmsPendingConfirm } = useStorageBackend();
 
   function editKey(field: ContentEditorField) {
     return `${page}.${field.section}.${field.key}`;
@@ -4497,11 +5424,13 @@ function FocusedContentEditor({
   }
 
   async function uploadAsset(field: ContentEditorField, file: File) {
+    const resolvedBackend = await resolveCmsBackend();
+    if (resolvedBackend === null) return;
     const key = editKey(field);
     setUploadingKey(key);
     setSaveError("");
     try {
-      const uploaded = await api.adminUploadMedia(file, `${title} ${field.label}`);
+      const uploaded = await api.adminUploadMedia(file, `${title} ${field.label}`, resolvedBackend);
       updateField(field, uploaded.url);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Upload failed.");
@@ -4570,6 +5499,19 @@ function FocusedContentEditor({
           <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
             {saveError}
           </p>
+        )}
+
+        {fields.some((f) => f.input === "image") && (
+          <div className="mt-4">
+            <p className="mb-1.5 text-xs font-semibold text-muted-foreground">Image upload destination</p>
+            <StorageBackendPicker
+              selected={cmsBackend}
+              onChange={setCmsBackend}
+              backends={cmsBackends}
+              configuredKeys={cmsConfiguredKeys}
+              pendingConfirm={cmsPendingConfirm}
+            />
+          </div>
         )}
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -5290,6 +6232,7 @@ const BADGE_COLOR_STYLES: Record<string, string> = {
 
 function OffersTab() {
   const qc = useQueryClient();
+  const [, setActiveTab] = useAdminTabPref();
   const [modal, setModal] = useState<{
     mode: "add" | "edit";
     id?: number;
@@ -5298,12 +6241,42 @@ function OffersTab() {
   const offersQuery = useQuery({ queryKey: ["admin-offers"], queryFn: api.adminOffers });
   const offers = offersQuery.data ?? [];
 
+  // Check if we arrived here via "Add new offer" from a package modal
+  const PKG_LINK_KEY = "jm_pkg_link_pending";
+  const pkgLinkPending: { linkType: string; pkgForm: { title?: string } } | null = (() => {
+    try {
+      const raw = sessionStorage.getItem(PKG_LINK_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return p.linkType === "offer" && !p.linkedOfferId ? p : null;
+    } catch { return null; }
+  })();
+
+  // Auto-open add modal when redirected from package modal
+  useEffect(() => {
+    if (pkgLinkPending) openAdd();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const createMut = useMutation({
     mutationFn: (data: OfferPayload) => api.adminCreateOffer(data),
-    onSuccess: () => {
+    onSuccess: (newOffer) => {
       qc.invalidateQueries({ queryKey: ["admin-offers"] });
       qc.invalidateQueries({ queryKey: ["offers"] });
       setModal(null);
+      // If we came from "Add new offer" inside a package modal, link back and return
+      try {
+        const raw = sessionStorage.getItem(PKG_LINK_KEY);
+        if (raw) {
+          const pending = JSON.parse(raw);
+          if (pending.linkType === "offer" && !pending.linkedOfferId) {
+            pending.linkedOfferId = newOffer.id;
+            sessionStorage.setItem(PKG_LINK_KEY, JSON.stringify(pending));
+            setActiveTab("packages");
+            return;
+          }
+        }
+      } catch { /* ignore */ }
     },
   });
   const updateMut = useMutation({
@@ -5376,6 +6349,13 @@ function OffersTab() {
   return (
     <div>
       <SessionBanner error={offersQuery.error as Error | null} />
+      {pkgLinkPending && (
+        <div className="mb-4 rounded-2xl border border-accent/40 bg-accent/5 px-5 py-3 text-sm font-medium text-accent">
+          You're creating an offer to link into package{" "}
+          <strong>{pkgLinkPending.pkgForm?.title || "your package"}</strong>.
+          Fill in the full details below and save — you'll be taken straight back to the package form.
+        </div>
+      )}
 
       <div className="mb-6 flex items-center justify-between">
         <div>
@@ -5925,3 +6905,919 @@ function PagesTab() {
     </div>
   );
 }
+
+// ── Settings tab ──────────────────────────────────────────────────────────────
+
+const STORAGE_BACKEND_META: Record<string, { label: string; description: string }> = {
+  local: { label: "Local server", description: "Files saved on the server disk. No extra setup needed." },
+  gdrive: { label: "Google Drive", description: "Files uploaded to the connected Google Drive account." },
+  r2: { label: "Cloudflare R2", description: "S3-compatible object storage with global CDN." },
+};
+
+const ADMIN_HEADERS = { "x-admin-token": "dev-admin-token" };
+
+function SettingsTab() {
+  const queryClient = useQueryClient();
+
+  const { data: sysData, refetch: refetchSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: () =>
+      fetch(`${API_BASE_URL}/admin/system-settings`, { headers: ADMIN_HEADERS })
+        .then((r) => r.json() as Promise<{
+          settings: Record<string, string>;
+          is_superadmin: boolean;
+          secrets_store: { backend: string; available: string };
+        }>),
+  });
+
+  const { data: backends } = useQuery({
+    queryKey: ["storage-backends"],
+    queryFn: () =>
+      fetch(`${API_BASE_URL}/admin/storage/backends`, { headers: ADMIN_HEADERS })
+        .then((r) => r.json() as Promise<{ backends: { key: string; label: string }[] }>),
+  });
+
+  const { data: gdriveStatus, refetch: refetchGdrive } = useQuery({
+    queryKey: ["gdrive-status"],
+    queryFn: () =>
+      fetch(`${API_BASE_URL}/admin/gdrive/status`, { headers: ADMIN_HEADERS })
+        .then((r) => r.json() as Promise<{ connected: boolean }>),
+  });
+
+  const settings = sysData?.settings ?? {};
+  const isSuperAdmin = sysData?.is_superadmin ?? false;
+  const secretsStoreInfo = sysData?.secrets_store;
+  const availableKeys = new Set((backends?.backends ?? []).map((b) => b.key));
+  const isConnected = gdriveStatus?.connected ?? false;
+
+  const SECRETS_STORE_META: Record<string, { label: string; description: string; secure: boolean }> = {
+    SQLiteSecretsStore: {
+      label: "SQLite (local DB)",
+      description: "Credentials stored in local database. Set SECRETS_ENCRYPTION_KEY in backend/.env for encryption at rest.",
+      secure: false,
+    },
+    CloudflareKVSecretsStore: {
+      label: "Cloudflare Workers KV",
+      description: "Credentials stored in Cloudflare's encrypted KV store. Ideal for Cloudflare-hosted backends.",
+      secure: true,
+    },
+    InfisicalSecretsStore: {
+      label: "Infisical",
+      description: "Credentials stored in Infisical secrets manager (end-to-end encrypted, free forever plan).",
+      secure: true,
+    },
+  };
+
+  // ── Default backend selector ──────────────────────────────────────────────
+  const [selectedDefault, setSelectedDefault] = useState<string>("");
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [defaultMsg, setDefaultMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings["storage.default_backend"]) {
+      setSelectedDefault(settings["storage.default_backend"]);
+    }
+  }, [settings]);
+
+  async function handleSaveDefault() {
+    if (!selectedDefault) return;
+    setSavingDefault(true);
+    setDefaultMsg(null);
+    try {
+      // Regular admins use the restricted endpoint; superadmins use the full one
+      const endpoint = isSuperAdmin
+        ? `${API_BASE_URL}/admin/system-settings`
+        : `${API_BASE_URL}/admin/system-settings/storage-default`;
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+        body: JSON.stringify({ "storage.default_backend": selectedDefault }),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        setDefaultMsg(d.detail ?? "Failed to save.");
+      } else {
+        setDefaultMsg("Default backend saved.");
+        void refetchSettings();
+        void queryClient.invalidateQueries({ queryKey: ["storage-backends"] });
+      }
+    } catch {
+      setDefaultMsg("Could not reach the API.");
+    } finally {
+      setSavingDefault(false);
+    }
+  }
+
+  // ── R2 credentials form ───────────────────────────────────────────────────
+  const [r2Form, setR2Form] = useState({
+    "r2.account_id": "",
+    "r2.access_key_id": "",
+    "r2.secret_access_key": "",
+    "r2.bucket": "",
+    "r2.public_url": "",
+  });
+  const [r2Saving, setR2Saving] = useState(false);
+  const [r2Msg, setR2Msg] = useState<string | null>(null);
+  const [r2Success, setR2Success] = useState(false);
+
+  useEffect(() => {
+    setR2Form((prev) => ({
+      "r2.account_id": settings["r2.account_id"] || prev["r2.account_id"],
+      "r2.access_key_id": settings["r2.access_key_id"] || prev["r2.access_key_id"],
+      "r2.secret_access_key": settings["r2.secret_access_key"] === "••••••••" ? prev["r2.secret_access_key"] : (settings["r2.secret_access_key"] || prev["r2.secret_access_key"]),
+      "r2.bucket": settings["r2.bucket"] || prev["r2.bucket"],
+      "r2.public_url": settings["r2.public_url"] || prev["r2.public_url"],
+    }));
+  }, [settings]);
+
+  async function handleSaveR2() {
+    setR2Saving(true);
+    setR2Msg(null);
+    setR2Success(false);
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r2Form)) {
+      if (v && v !== "••••••••") payload[k] = v;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/system-settings`, {
+        method: "PATCH",
+        headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        setR2Msg(d.detail ?? "Failed to save.");
+      } else {
+        setR2Success(true);
+        setR2Msg("R2 credentials saved. R2 is now available as a storage backend.");
+        void refetchSettings();
+        void queryClient.invalidateQueries({ queryKey: ["storage-backends"] });
+      }
+    } catch {
+      setR2Msg("Could not reach the API.");
+    } finally {
+      setR2Saving(false);
+    }
+  }
+
+  // ── DB backend form ───────────────────────────────────────────────────────
+  const [dbBackend, setDbBackend] = useState("local-sqlite");
+  const [neonUrl, setNeonUrl] = useState("");
+  const [gdriveDbRefreshToken, setGdriveDbRefreshToken] = useState("");
+  const [gdriveDbFileId, setGdriveDbFileId] = useState("");
+  const [r2DbKey, setR2DbKey] = useState("db/journeymakers.sqlite3");
+  const [dbSaving, setDbSaving] = useState(false);
+  const [dbMsg, setDbMsg] = useState<string | null>(null);
+  const [dbSuccess, setDbSuccess] = useState(false);
+
+  useEffect(() => {
+    if (settings["db.backend"]) setDbBackend(settings["db.backend"]);
+    if (settings["db.gdrive_file_id"]) setGdriveDbFileId(settings["db.gdrive_file_id"]);
+    if (settings["db.r2_key"]) setR2DbKey(settings["db.r2_key"]);
+  }, [settings]);
+
+  async function handleSaveDbBackend() {
+    setDbSaving(true);
+    setDbMsg(null);
+    setDbSuccess(false);
+    const payload: Record<string, string> = { "db.backend": dbBackend };
+    if (dbBackend === "neon-postgres" && neonUrl) payload["db.neon_url"] = neonUrl;
+    if (dbBackend === "gdrive-sqlite") {
+      if (gdriveDbRefreshToken) payload["db.gdrive_refresh_token"] = gdriveDbRefreshToken;
+      if (gdriveDbFileId) payload["db.gdrive_file_id"] = gdriveDbFileId;
+    }
+    if (dbBackend === "r2-sqlite" && r2DbKey) payload["db.r2_key"] = r2DbKey;
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/system-settings`, {
+        method: "PATCH",
+        headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        setDbMsg(d.detail ?? "Failed to save.");
+      } else {
+        setDbSuccess(true);
+        setDbMsg("DB backend saved. Restart the server to apply the change.");
+        void refetchSettings();
+      }
+    } catch {
+      setDbMsg("Could not reach the API.");
+    } finally {
+      setDbSaving(false);
+    }
+  }
+
+  // ── Google OAuth app credentials form ────────────────────────────────────
+  const [googleForm, setGoogleForm] = useState({ "google.client_id": "", "google.client_secret": "" });
+  const [googleSaving, setGoogleSaving] = useState(false);
+  const [googleMsg, setGoogleMsg] = useState<string | null>(null);
+  const [googleSuccess, setGoogleSuccess] = useState(false);
+
+  useEffect(() => {
+    setGoogleForm((prev) => ({
+      "google.client_id": settings["google.client_id"] || prev["google.client_id"],
+      "google.client_secret": settings["google.client_secret"] === "••••••••" ? prev["google.client_secret"] : (settings["google.client_secret"] || prev["google.client_secret"]),
+    }));
+  }, [settings]);
+
+  async function handleSaveGoogle() {
+    setGoogleSaving(true);
+    setGoogleMsg(null);
+    setGoogleSuccess(false);
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(googleForm)) {
+      if (v && v !== "••••••••") payload[k] = v;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/system-settings`, {
+        method: "PATCH",
+        headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        setGoogleMsg(d.detail ?? "Failed to save.");
+      } else {
+        setGoogleSuccess(true);
+        setGoogleMsg("Google OAuth credentials saved. You can now connect Google Drive.");
+        void refetchSettings();
+      }
+    } catch {
+      setGoogleMsg("Could not reach the API.");
+    } finally {
+      setGoogleSaving(false);
+    }
+  }
+
+  // ── GDrive OAuth ──────────────────────────────────────────────────────────
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [gdriveMsg, setGdriveMsg] = useState<string | null>(null);
+
+  async function handleConnect() {
+    setConnecting(true);
+    setGdriveMsg(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/gdrive/authorize`, { headers: ADMIN_HEADERS });
+      const data = (await res.json()) as { url?: string; detail?: string };
+      if (data.url) {
+        window.open(data.url, "_blank", "width=600,height=700");
+        setGdriveMsg("Complete the Google sign-in in the popup, then click 'Refresh status'.");
+      } else {
+        setGdriveMsg(data.detail ?? "Failed to get authorization URL. Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET above or in backend/.env.");
+      }
+    } catch {
+      setGdriveMsg("Could not reach the API. Make sure the backend is running.");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    setGdriveMsg(null);
+    try {
+      await fetch(`${API_BASE_URL}/admin/gdrive/disconnect`, {
+        method: "DELETE",
+        headers: ADMIN_HEADERS,
+      });
+      setGdriveMsg("Google Drive disconnected.");
+      void refetchGdrive();
+    } catch {
+      setGdriveMsg("Failed to disconnect.");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  const DefaultBackendSection = (
+    <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+      <h3 className="mb-1 text-sm font-bold">Default storage backend for uploads</h3>
+      <p className="mb-4 text-xs text-muted-foreground">
+        New uploads will use this backend unless overridden per-upload.
+      </p>
+      <div className="flex flex-col gap-2.5">
+        {(["local", "gdrive", "r2"] as const).map((key) => {
+          const live = availableKeys.has(key);
+          const meta = STORAGE_BACKEND_META[key];
+          return (
+            <label
+              key={key}
+              className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors ${
+                selectedDefault === key
+                  ? "border-accent bg-accent/5"
+                  : "border-border hover:border-border/80"
+              } ${!live ? "opacity-50" : ""}`}
+            >
+              <input
+                type="radio"
+                name="default_backend"
+                value={key}
+                checked={selectedDefault === key}
+                disabled={!live}
+                onChange={() => setSelectedDefault(key)}
+                className="accent-accent"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-semibold">{meta.label}</span>
+                {!live && <span className="ml-2 text-xs text-muted-foreground">(not configured)</span>}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      {defaultMsg && (
+        <p className="mt-3 rounded-xl bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent">
+          {defaultMsg}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => void handleSaveDefault()}
+        disabled={savingDefault || !selectedDefault}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+      >
+        {savingDefault ? "Saving…" : "Save default"}
+      </button>
+    </div>
+  );
+
+  // Non-superadmin: show only the storage-default picker, filtered to configured backends only
+  if (!isSuperAdmin) {
+    const configuredBackends = (["local", "gdrive", "r2"] as const).filter((k) =>
+      availableKeys.has(k),
+    );
+    return (
+      <div className="mx-auto max-w-xl space-y-6">
+        <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+          <h3 className="mb-1 text-sm font-bold">Default storage backend for uploads</h3>
+          <p className="mb-4 text-xs text-muted-foreground">
+            New uploads will use this backend unless overridden per-upload.
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {configuredBackends.map((key) => {
+              const meta = STORAGE_BACKEND_META[key];
+              return (
+                <label
+                  key={key}
+                  className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors ${
+                    selectedDefault === key
+                      ? "border-accent bg-accent/5"
+                      : "border-border hover:border-border/80"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="default_backend"
+                    value={key}
+                    checked={selectedDefault === key}
+                    onChange={() => setSelectedDefault(key)}
+                    className="accent-accent"
+                  />
+                  <span className="text-sm font-semibold">{meta.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {defaultMsg && (
+            <p className="mt-3 rounded-xl bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent">
+              {defaultMsg}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleSaveDefault()}
+            disabled={savingDefault || !selectedDefault}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+          >
+            {savingDefault ? "Saving…" : "Save default"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-8">
+      <div className="rounded-2xl border border-border bg-[#fbf6ee] p-5">
+        <h2 className="text-xl font-black mb-1">System Settings</h2>
+        <p className="text-xs text-muted-foreground">
+          Super admin controls — storage backends, credentials, and integrations.
+        </p>
+      </div>
+
+      {/* Secrets store status */}
+      {secretsStoreInfo && (() => {
+        const meta = SECRETS_STORE_META[secretsStoreInfo.backend];
+        const isSecure = meta?.secure ?? false;
+        return (
+          <div className={`rounded-2xl border p-5 ${isSecure ? "border-green-200 bg-green-50/50" : "border-amber-200 bg-amber-50/60"}`}>
+            <div className="flex items-center gap-3">
+              <span className={`size-2.5 rounded-full shrink-0 ${isSecure ? "bg-green-500" : "bg-amber-400"}`} />
+              <div className="flex-1">
+                <p className="text-sm font-bold">
+                  Secrets store:{" "}
+                  <span className={isSecure ? "text-green-700" : "text-amber-700"}>
+                    {meta?.label ?? secretsStoreInfo.backend}
+                  </span>
+                </p>
+                <p className={`mt-0.5 text-xs ${isSecure ? "text-green-700" : "text-amber-700"}`}>
+                  {meta?.description ?? "Unknown secrets backend."}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold ${isSecure ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                {isSecure ? "Encrypted" : "Plain / local"}
+              </span>
+            </div>
+            {!isSecure && (
+              <p className="mt-3 text-xs text-amber-700">
+                <span className="font-semibold">To upgrade:</span> Set{" "}
+                <code className="rounded bg-amber-100 px-1 font-mono">SECRETS_BACKEND=infisical</code> or{" "}
+                <code className="rounded bg-amber-100 px-1 font-mono">SECRETS_BACKEND=cloudflare_kv</code>{" "}
+                in <code className="rounded bg-amber-100 px-1 font-mono">backend/.env</code>, or set{" "}
+                <code className="rounded bg-amber-100 px-1 font-mono">SECRETS_ENCRYPTION_KEY</code> to encrypt at rest.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Storage backends status overview */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-base font-bold">Storage backends</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Shows which backends are configured and available.
+        </p>
+        <div className="grid gap-3">
+          {(["local", "gdrive", "r2"] as const).map((key) => {
+            const live = availableKeys.has(key);
+            const meta = STORAGE_BACKEND_META[key];
+            const isCurrent = settings["storage.default_backend"] === key || (!settings["storage.default_backend"] && key === "local");
+            return (
+              <div
+                key={key}
+                className={`flex items-start gap-3 rounded-xl border p-4 ${live ? "border-green-200 bg-green-50/50" : "border-border bg-secondary/20"}`}
+              >
+                <span className={`mt-0.5 size-2 shrink-0 rounded-full ${live ? "bg-green-500" : "bg-gray-300"}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold">{meta.label}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{meta.description}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${live ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {live ? "Available" : "Not configured"}
+                  </span>
+                  {isCurrent && (
+                    <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
+                      Default
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Default backend selector — admin uploads */}
+      {DefaultBackendSection}
+
+      {/* Default backend selector — user uploads */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-sm font-bold">Default storage backend for user uploads</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Images/videos uploaded by users (travel memories, reviews) go to this backend.
+        </p>
+        <UserUploadBackendSection
+          availableKeys={availableKeys}
+          currentValue={settings["storage.user_default_backend"] || "local"}
+          onSave={async (val) => {
+            await fetch(`${API_BASE_URL}/admin/system-settings`, {
+              method: "PATCH",
+              headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+              body: JSON.stringify({ "storage.user_default_backend": val }),
+            });
+            void refetchSettings();
+          }}
+        />
+      </div>
+
+      {/* Google OAuth app credentials */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-sm font-bold">Google OAuth — app credentials</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Enter your Google Cloud OAuth 2.0 client credentials. These are stored securely and used
+          for Drive integration. Create them at{" "}
+          <span className="font-mono">console.cloud.google.com → APIs &amp; Services → Credentials</span>.
+        </p>
+        <div className="grid gap-3">
+          {([
+            { key: "google.client_id" as const, label: "Client ID", placeholder: "*.apps.googleusercontent.com" },
+            { key: "google.client_secret" as const, label: "Client Secret", placeholder: settings["google.client_secret"] === "••••••••" ? "Already saved — leave blank to keep" : "GOCSPX-…", type: "password" as const },
+          ]).map(({ key, label, placeholder, type }) => (
+            <div key={key}>
+              <label className="mb-1 block text-xs font-semibold text-foreground">{label}</label>
+              <input
+                type={type ?? "text"}
+                value={googleForm[key]}
+                onChange={(e) => setGoogleForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
+                className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+          ))}
+        </div>
+        {googleMsg && (
+          <p className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-medium ${googleSuccess ? "bg-green-50 text-green-800" : "bg-destructive/10 text-destructive"}`}>
+            {googleMsg}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleSaveGoogle()}
+          disabled={googleSaving}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          {googleSaving ? "Saving…" : "Save Google credentials"}
+        </button>
+      </div>
+
+      {/* Google Drive OAuth */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#4285f4]/10">
+            <svg viewBox="0 0 87.3 78" className="size-4">
+              <path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+              <path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 48.5C.4 49.9 0 51.45 0 53h27.5z" fill="#00ac47"/>
+              <path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/>
+              <path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.95 0H34.35c-1.55 0-3.1.45-4.45 1.2z" fill="#00832d"/>
+              <path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.45 1.2h50.9c1.55 0 3.1-.4 4.45-1.2z" fill="#2684fc"/>
+              <path d="M73.4 26.5l-12.65-21.8C59.95 3.1 58.8 2 57.45 1.2L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-bold">Google Drive — Connect</h3>
+            <p className="text-xs text-muted-foreground">Link a Google account to use Drive as a storage backend</p>
+          </div>
+          <span
+            className={`ml-auto shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+              isConnected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            <span className={`size-1.5 rounded-full ${isConnected ? "bg-green-500" : "bg-gray-400"}`} />
+            {isConnected ? "Connected" : "Not connected"}
+          </span>
+        </div>
+
+        {gdriveMsg && (
+          <p className="mb-3 rounded-xl bg-accent/10 px-4 py-2.5 text-sm text-accent font-medium">
+            {gdriveMsg}
+          </p>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          {!isConnected ? (
+            <button
+              type="button"
+              onClick={() => void handleConnect()}
+              disabled={connecting}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#4285f4] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#3367d6] disabled:opacity-60 transition-colors"
+            >
+              {connecting ? "Opening…" : "Connect Google Drive"}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleConnect()}
+                disabled={connecting}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#4285f4] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#3367d6] disabled:opacity-60 transition-colors"
+              >
+                {connecting ? "Opening…" : "Switch Google account"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDisconnect()}
+                disabled={disconnecting}
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-5 py-2.5 text-sm font-bold text-destructive hover:border-destructive disabled:opacity-60 transition-colors"
+              >
+                {disconnecting ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => void refetchGdrive()}
+            className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Refresh status
+          </button>
+        </div>
+      </div>
+
+      {/* Database backend selector */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-sm font-bold">Database backend</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Where the application database (SQLite or Postgres) is stored. Change takes effect after a server restart.
+        </p>
+        <div className="flex flex-col gap-2.5 mb-4">
+          {([
+            { key: "local-sqlite", label: "Local SQLite", desc: "Stored on the server filesystem (default, zero config)" },
+            { key: "gdrive-sqlite", label: "Google Drive SQLite", desc: "SQLite file stored in Google Drive, synced on every write" },
+            { key: "r2-sqlite", label: "Cloudflare R2 SQLite", desc: "SQLite file stored in Cloudflare R2, synced on every write" },
+            { key: "neon-postgres", label: "Neon Postgres", desc: "Serverless Postgres — requires NEON_DATABASE_URL and separate schema setup" },
+          ] as const).map(({ key, label, desc }) => (
+            <label
+              key={key}
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${
+                dbBackend === key ? "border-accent bg-accent/5" : "border-border hover:border-border/80"
+              }`}
+            >
+              <input
+                type="radio"
+                name="db_backend"
+                value={key}
+                checked={dbBackend === key}
+                onChange={() => setDbBackend(key)}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <span className="text-sm font-semibold">{label}</span>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {dbBackend === "neon-postgres" && (
+          <div className="mb-4">
+            <label className="mb-1 block text-xs font-semibold">Neon DATABASE_URL</label>
+            <input
+              type="password"
+              value={neonUrl}
+              onChange={(e) => setNeonUrl(e.target.value)}
+              placeholder="postgresql://user:pass@host.neon.tech/dbname?sslmode=require"
+              className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+          </div>
+        )}
+
+        {dbBackend === "gdrive-sqlite" && (
+          <div className="mb-4 grid gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold">GDrive Refresh Token</label>
+              <input
+                type="password"
+                value={gdriveDbRefreshToken}
+                onChange={(e) => setGdriveDbRefreshToken(e.target.value)}
+                placeholder="Paste long-lived refresh token (from OAuth flow)"
+                className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold">GDrive File ID (optional — leave blank to auto-create)</label>
+              <input
+                type="text"
+                value={gdriveDbFileId}
+                onChange={(e) => setGdriveDbFileId(e.target.value)}
+                placeholder="1abc…XYZ"
+                className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+          </div>
+        )}
+
+        {dbBackend === "r2-sqlite" && (
+          <div className="mb-4">
+            <label className="mb-1 block text-xs font-semibold">R2 Object Key</label>
+            <input
+              type="text"
+              value={r2DbKey}
+              onChange={(e) => setR2DbKey(e.target.value)}
+              placeholder="db/journeymakers.sqlite3"
+              className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">Uses the R2 credentials configured below.</p>
+          </div>
+        )}
+
+        {dbMsg && (
+          <p className={`mb-3 rounded-xl px-4 py-2.5 text-sm font-medium ${dbSuccess ? "bg-green-50 text-green-800" : "bg-destructive/10 text-destructive"}`}>
+            {dbMsg}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleSaveDbBackend()}
+          disabled={dbSaving}
+          className="inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          {dbSaving ? "Saving…" : "Save DB backend"}
+        </button>
+      </div>
+
+      {/* Cloudflare R2 credentials form */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-sm font-bold">Cloudflare R2 — credentials</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Credentials are stored securely — no env file or server restart needed.
+        </p>
+
+        <div className="grid gap-3">
+          {([
+            { key: "r2.account_id", label: "Account ID", placeholder: "e.g. abc123def456…" },
+            { key: "r2.access_key_id", label: "Access Key ID", placeholder: "R2 API token key" },
+            { key: "r2.secret_access_key", label: "Secret Access Key", placeholder: settings["r2.secret_access_key"] === "••••••••" ? "Already saved — leave blank to keep" : "R2 API token secret", type: "password" },
+            { key: "r2.bucket", label: "Bucket name", placeholder: "my-journeymakers-bucket" },
+            { key: "r2.public_url", label: "Public URL", placeholder: "https://pub-abc.r2.dev" },
+          ] as { key: keyof typeof r2Form; label: string; placeholder: string; type?: string }[]).map(({ key, label, placeholder, type }) => (
+            <div key={key}>
+              <label className="mb-1 block text-xs font-semibold text-foreground">{label}</label>
+              <input
+                type={type ?? "text"}
+                value={r2Form[key]}
+                onChange={(e) => setR2Form((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
+                className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+          ))}
+        </div>
+
+        {r2Msg && (
+          <p className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-medium ${r2Success ? "bg-green-50 text-green-800" : "bg-destructive/10 text-destructive"}`}>
+            {r2Msg}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => void handleSaveR2()}
+          disabled={r2Saving}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          {r2Saving ? "Saving…" : "Save R2 credentials"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UserUploadBackendSection({
+  availableKeys,
+  currentValue,
+  onSave,
+}: {
+  availableKeys: Set<string>;
+  currentValue: string;
+  onSave: (val: string) => Promise<void>;
+}) {
+  const [selected, setSelected] = useState(currentValue);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => { setSelected(currentValue); }, [currentValue]);
+
+  return (
+    <>
+      <div className="flex flex-col gap-2.5">
+        {(["local", "gdrive", "r2"] as const).map((key) => {
+          const live = availableKeys.has(key);
+          const meta = STORAGE_BACKEND_META[key];
+          return (
+            <label
+              key={key}
+              className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-colors ${
+                selected === key ? "border-accent bg-accent/5" : "border-border hover:border-border/80"
+              } ${!live ? "opacity-50" : ""}`}
+            >
+              <input
+                type="radio"
+                name="user_default_backend"
+                value={key}
+                checked={selected === key}
+                disabled={!live}
+                onChange={() => setSelected(key)}
+                className="accent-accent"
+              />
+              <div className="flex-1">
+                <span className="text-sm font-semibold">{meta.label}</span>
+                {!live && <span className="ml-2 text-xs text-muted-foreground">(not configured)</span>}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      {msg && <p className="mt-3 rounded-xl bg-accent/10 px-4 py-2.5 text-sm font-medium text-accent">{msg}</p>}
+      <button
+        type="button"
+        disabled={saving}
+        onClick={async () => {
+          setSaving(true);
+          setMsg(null);
+          await onSave(selected);
+          setMsg("User upload backend saved.");
+          setSaving(false);
+        }}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+      >
+        {saving ? "Saving…" : "Save"}
+      </button>
+    </>
+  );
+}
+
+// ── Destination gallery multi-upload ─────────────────────────────────────────
+
+function DestinationGalleryUpload({
+  slug,
+  onAdded,
+}: {
+  slug: string;
+  onAdded: (urls: string[]) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [linkInput, setLinkInput] = useState("");
+  const { resolveBackend } = useStorageBackend();
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setError("");
+    const resolvedBackend = await resolveBackend();
+    if (resolvedBackend === null) return;
+    setUploading(true);
+    const uploadedUrls: string[] = [];
+    try {
+      for (const file of Array.from(files)) {
+        const result = await api.adminUploadMedia(file, slug, resolvedBackend);
+        uploadedUrls.push(result.url);
+      }
+      if (uploadedUrls.length > 0) onAdded(uploadedUrls);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  function addLink() {
+    const url = linkInput.trim();
+    if (!url) return;
+    onAdded([url]);
+    setLinkInput("");
+  }
+
+  return (
+    <div className="space-y-2">
+      <div
+        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-secondary/20 p-5 hover:border-accent/60 transition-colors"
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Uploading…
+          </div>
+        ) : (
+          <>
+            <Image className="size-6 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Click to upload images / videos</p>
+            <p className="text-xs text-muted-foreground/70">JPG, PNG, WebP, MP4 — up to 50 MB each</p>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={linkInput}
+          onChange={(e) => setLinkInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLink(); } }}
+          placeholder="Or paste a photo / video URL…"
+          className="min-w-0 flex-1 rounded-xl border border-border bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-accent/30"
+        />
+        <button
+          type="button"
+          onClick={addLink}
+          disabled={!linkInput.trim()}
+          className="shrink-0 rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-semibold hover:bg-secondary/80 disabled:opacity-40"
+        >
+          Add link
+        </button>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept="image/*,video/mp4,video/quicktime"
+        className="hidden"
+        onChange={(e) => void handleFiles(e.target.files)}
+      />
+    </div>
+  );
+}
+

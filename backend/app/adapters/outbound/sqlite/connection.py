@@ -1,4 +1,4 @@
-"""SQLite connection wrapper used by all SQLite repository adapters."""
+"""SQLite connection wrapper — local-sqlite database adapter."""
 from __future__ import annotations
 
 import sqlite3
@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from ....domain.utils import json_loads
+from ....ports.database import IDatabase
 
 
 # JSON-serialised columns that are transparently decoded into Python lists
@@ -22,6 +23,10 @@ _JSON_LIST_COLUMNS = frozenset(
         "gallery",
         "reviews",
         "media_urls",
+        "destination_slugs",
+        "service_ids",
+        "offer_ids",
+        "basket_items",
     }
 )
 
@@ -37,8 +42,8 @@ def row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return data
 
 
-class SQLiteDatabase:
-    """Lightweight connection factory injected into every repository."""
+class SQLiteDatabase(IDatabase):
+    """Local-SQLite adapter — stores the database file on the server filesystem."""
 
     def __init__(self, database_path: str) -> None:
         self._path = database_path

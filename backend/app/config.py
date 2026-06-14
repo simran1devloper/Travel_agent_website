@@ -44,6 +44,70 @@ class Settings(BaseModel):
     def auth0_jwks_url(self) -> str:
         return f"{self.auth0_issuer}.well-known/jwks.json"
 
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv(
+        "GOOGLE_REDIRECT_URI", "http://localhost:8000/admin/gdrive/callback"
+    )
+
+    # Cloudflare R2 (S3-compatible object storage)
+    r2_account_id: str = os.getenv("R2_ACCOUNT_ID", "")
+    r2_access_key_id: str = os.getenv("R2_ACCESS_KEY_ID", "")
+    r2_secret_access_key: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
+    r2_bucket: str = os.getenv("R2_BUCKET", "")
+    r2_public_url: str = os.getenv("R2_PUBLIC_URL", "")
+
+    # Default storage backend — overridden by super-admin via API
+    default_storage_backend: str = os.getenv("JOURNEYMAKERS_STORAGE", "local")
+
+    # ── Database backend ─────────────────────────────────────────────────────
+    # Options: "local-sqlite" (default), "gdrive-sqlite", "r2-sqlite", "neon-postgres"
+    # Overridden at runtime by the super-admin via UI (stored in system_settings).
+    db_backend: str = os.getenv("JOURNEYMAKERS_DB_BACKEND", "local-sqlite")
+
+    # Neon Postgres connection string (used when db_backend = "neon-postgres")
+    neon_database_url: str = os.getenv("NEON_DATABASE_URL", "")
+
+    # GDrive SQLite (used when db_backend = "gdrive-sqlite")
+    gdrive_db_refresh_token: str = os.getenv("GDRIVE_DB_REFRESH_TOKEN", "")
+    gdrive_db_file_id: str = os.getenv("GDRIVE_DB_FILE_ID", "")
+
+    # R2 SQLite (uses the same R2 credentials above; override object key if needed)
+    r2_db_key: str = os.getenv("R2_DB_KEY", "db/journeymakers.sqlite3")
+
+    # ── Secrets backend ──────────────────────────────────────────────────────
+    # Which store to use for sensitive credentials (r2 keys, etc.)
+    # Options: "sqlite" (default, plain-text or encrypted), "cloudflare_kv", "infisical"
+    secrets_backend: str = os.getenv("SECRETS_BACKEND", "sqlite")
+
+    # SQLite secrets store: optional Fernet encryption key
+    # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    secrets_encryption_key: str = os.getenv("SECRETS_ENCRYPTION_KEY", "")
+
+    # Cloudflare Workers KV secrets store
+    cf_kv_account_id: str = os.getenv("CF_KV_ACCOUNT_ID", "")
+    cf_kv_namespace_id: str = os.getenv("CF_KV_NAMESPACE_ID", "")
+    cf_kv_api_token: str = os.getenv("CF_KV_API_TOKEN", "")
+
+    # Infisical secrets store
+    infisical_token: str = os.getenv("INFISICAL_TOKEN", "")
+    infisical_workspace_id: str = os.getenv("INFISICAL_WORKSPACE_ID", "")
+    infisical_environment: str = os.getenv("INFISICAL_ENVIRONMENT", "prod")
+    infisical_base_url: str = os.getenv("INFISICAL_BASE_URL", "https://app.infisical.com")
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def r2_enabled(self) -> bool:
+        return bool(
+            self.r2_account_id
+            and self.r2_access_key_id
+            and self.r2_secret_access_key
+            and self.r2_bucket
+        )
+
     @property
     def auth0_enabled(self) -> bool:
         # Audience is optional — required only when a backend API is registered in Auth0.

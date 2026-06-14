@@ -246,6 +246,24 @@ CREATE TABLE IF NOT EXISTS site_content (
   updated_at TEXT NOT NULL,
   UNIQUE(page, section, key)
 );
+
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  public_id TEXT NOT NULL UNIQUE,
+  entity_type TEXT NOT NULL,
+  entity_slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL
+);
 """
 
 _ALTERS = [
@@ -276,6 +294,26 @@ _ALTERS = [
     "ALTER TABLE services ADD COLUMN show_hero_card INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE services ADD COLUMN show_footer INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE services ADD COLUMN status TEXT NOT NULL DEFAULT 'published'",
+    "ALTER TABLE inquiries ADD COLUMN date_from TEXT",
+    "ALTER TABLE inquiries ADD COLUMN date_to TEXT",
+    "ALTER TABLE inquiries ADD COLUMN basket_items TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE customers ADD COLUMN gdrive_refresh_token TEXT",
+    "ALTER TABLE customers ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE services ADD COLUMN price REAL",
+    "ALTER TABLE reviews ADD COLUMN moderation_note TEXT",
+    "ALTER TABLE inquiries ADD COLUMN moderator_note TEXT",
+    # Item 10: package card_type + linked entities
+    "ALTER TABLE packages ADD COLUMN card_type TEXT NOT NULL DEFAULT 'normal'",
+    "ALTER TABLE packages ADD COLUMN destination_slugs TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE packages ADD COLUMN service_ids TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE packages ADD COLUMN offer_ids TEXT NOT NULL DEFAULT '[]'",
+    # Reviews on destinations + services
+    "ALTER TABLE reviews ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'package'",
+    "ALTER TABLE reviews ADD COLUMN entity_slug TEXT",
+    # Multi-media gallery for packages
+    "ALTER TABLE packages ADD COLUMN media_urls TEXT NOT NULL DEFAULT '[]'",
+    # Media moderation — user uploads start as pending
+    "ALTER TABLE media ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'pending'",
 ]
 
 _INDEXES = [
@@ -307,6 +345,10 @@ def migrate(db: SQLiteDatabase) -> None:
         _seed(conn)
         _patch_content_defaults(conn)
         _patch_service_content(conn)
+        # Backfill: admin-owned media existing before moderation column was added → approved
+        conn.execute(
+            "UPDATE media SET moderation_status = 'approved' WHERE owner_type = 'admin' AND moderation_status = 'pending'"
+        )
 
 
 # ---------------------------------------------------------------------------

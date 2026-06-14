@@ -4,7 +4,7 @@ export type LocalUser = {
   id: string;
   email: string;
   name: string;
-  role: "user" | "admin";
+  role: "user" | "admin" | "moderator";
 };
 
 export function getLocalToken(): string | null {
@@ -34,7 +34,7 @@ export function decodeLocalToken(token: string): LocalUser | null {
       id: String(payload.sub ?? ""),
       email: String(payload.email ?? ""),
       name: String(payload.name ?? ""),
-      role: (payload.role === "admin" ? "admin" : "user") as "user" | "admin",
+      role: (["admin", "moderator"].includes(String(payload.role)) ? payload.role : "user") as "user" | "admin" | "moderator",
     };
   } catch {
     return null;

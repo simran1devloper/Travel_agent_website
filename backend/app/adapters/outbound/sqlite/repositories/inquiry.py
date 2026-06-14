@@ -18,10 +18,11 @@ class SQLiteInquiryRepository(IInquiryRepository):
                 INSERT INTO inquiries
                 (public_id, customer_id, full_name, email, phone, whatsapp,
                  preferred_contact, destinations, specific_place, experiences,
-                 travel_styles, services, preferred_dates, adults, children,
-                 budget, passport_notes, occasion, inspiration, inspiration_links,
-                 trip_feel, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', ?, ?)
+                 travel_styles, services, preferred_dates, date_from, date_to,
+                 adults, children, budget, passport_notes, occasion,
+                 inspiration, inspiration_links, trip_feel, basket_items,
+                 status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', ?, ?)
                 """,
                 (
                     data["public_id"], data.get("customer_id"), data["full_name"],
@@ -33,11 +34,13 @@ class SQLiteInquiryRepository(IInquiryRepository):
                     json_dumps(data.get("travel_styles", [])),
                     json_dumps(data.get("services", [])),
                     data.get("preferred_dates"),
+                    data.get("date_from"), data.get("date_to"),
                     data.get("adults", 1), data.get("children", 0),
                     data.get("budget"), data.get("passport_notes"),
                     data.get("occasion"),
                     json_dumps(data.get("inspiration", [])),
                     data.get("inspiration_links"), data.get("trip_feel"),
+                    json_dumps(data.get("basket_items", [])),
                     data["created_at"], data["updated_at"],
                 ),
             )

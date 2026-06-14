@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ImagePlus, Video, X, AlertCircle, Loader2 } from "lucide-react";
+import { ImagePlus, Video, X, AlertCircle, Loader2, Link } from "lucide-react";
 import { api } from "@/lib/api";
 
 type UploadState = "idle" | "uploading" | "done" | "error";
@@ -37,27 +37,35 @@ export function MediaUpload({
 }: Props) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [linkUrls, setLinkUrls] = useState<string[]>([]);
+  const [linkInput, setLinkInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Use a ref so upload callbacks always see the latest linkUrls without stale closure
+  const linkUrlsRef = useRef<string[]>([]);
+  linkUrlsRef.current = linkUrls;
 
   const uploadedUrls = (current: FileEntry[]) =>
     current.filter((e) => e.state === "done" && e.uploadedUrl).map((e) => e.uploadedUrl!);
+
+  const fireChange = useCallback(
+    (fileEntries: FileEntry[], links: string[]) => {
+      onUrlsChange([...uploadedUrls(fileEntries), ...links]);
+    },
+    [onUrlsChange],
+  );
 
   const startUpload = useCallback(
     async (entry: FileEntry, current: FileEntry[]) => {
       const updateEntry = (key: string, patch: Partial<FileEntry>, all: FileEntry[]) => {
         const next = all.map((e) => (e.key === key ? { ...e, ...patch } : e));
-        onUrlsChange(uploadedUrls(next));
+        onUrlsChange([...uploadedUrls(next), ...linkUrlsRef.current]);
         return next;
       };
 
-      let latest = current;
       try {
         const url = await api.uploadUserMediaWithProgress(entry.file, (pct) => {
-          setEntries((prev) => {
-            const next = updateEntry(entry.key, { progress: pct }, prev);
-            latest = next;
-            return next;
-          });
+          setEntries((prev) => updateEntry(entry.key, { progress: pct }, prev));
         });
         setEntries((prev) =>
           updateEntry(entry.key, { state: "done", progress: 100, uploadedUrl: url }, prev),
@@ -103,9 +111,24 @@ export function MediaUpload({
       const removed = prev.find((e) => e.key === key);
       if (removed) URL.revokeObjectURL(removed.previewUrl);
       const next = prev.filter((e) => e.key !== key);
-      onUrlsChange(uploadedUrls(next));
+      fireChange(next, linkUrlsRef.current);
       return next;
     });
+  };
+
+  const addLink = () => {
+    const url = linkInput.trim();
+    if (!url) return;
+    const next = [...linkUrls, url];
+    setLinkUrls(next);
+    setLinkInput("");
+    fireChange(entries, next);
+  };
+
+  const removeLink = (url: string) => {
+    const next = linkUrls.filter((u) => u !== url);
+    setLinkUrls(next);
+    fireChange(entries, next);
   };
 
   const isVideo = (entry: FileEntry) => entry.file.type.startsWith("video/");
@@ -169,7 +192,6 @@ export function MediaUpload({
                 <img src={entry.previewUrl} alt="preview" className="h-full w-full object-cover" />
               )}
 
-              {/* State overlay */}
               {entry.state === "uploading" && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/50">
                   <Loader2 className="size-5 animate-spin text-white" />
@@ -185,7 +207,6 @@ export function MediaUpload({
                 </div>
               )}
 
-              {/* Remove button */}
               {entry.state !== "uploading" && (
                 <button
                   type="button"
@@ -195,6 +216,52 @@ export function MediaUpload({
                   <X className="size-3.5 text-white" />
                 </button>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* URL link input */}
+      <div className="flex gap-2">
+        <input
+          type="url"
+          value={linkInput}
+          onChange={(e) => setLinkInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addLink();
+            }
+          }}
+          placeholder="Or paste a photo / video URL…"
+          className="min-w-0 flex-1 rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#c76b2f]/40"
+        />
+        <button
+          type="button"
+          onClick={addLink}
+          disabled={!linkInput.trim()}
+          className="shrink-0 rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-semibold hover:bg-secondary/80 disabled:opacity-40"
+        >
+          Add link
+        </button>
+      </div>
+
+      {linkUrls.length > 0 && (
+        <div className="space-y-1.5">
+          {linkUrls.map((url) => (
+            <div
+              key={url}
+              className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2"
+            >
+              <Link className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{url}</span>
+              <button
+                type="button"
+                onClick={() => removeLink(url)}
+                className="shrink-0 rounded-full p-0.5 hover:bg-secondary"
+              >
+                <X className="size-3.5 text-muted-foreground" />
+              </button>
             </div>
           ))}
         </div>

@@ -22,6 +22,8 @@ class InquiryCreate(BaseModel):
     travel_styles: list[str] = []
     services: list[str] = []
     preferred_dates: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
     adults: int = Field(default=1, ge=1, le=40)
     children: int = Field(default=0, ge=0, le=40)
     budget: str | None = None
@@ -30,6 +32,7 @@ class InquiryCreate(BaseModel):
     inspiration: list[str] = []
     inspiration_links: str | None = None
     trip_feel: str | None = None
+    basket_items: list[str] = []
 
 
 class InquiryUpdate(BaseModel):
@@ -59,6 +62,12 @@ class PackageCreate(BaseModel):
     review_count: int = Field(default=0, ge=0)
     published: bool = True
     reviews: list[dict[str, Any]] = []
+    # Item 10: card_type + linked entities
+    card_type: str = "normal"                 # "normal" | "pomplate"
+    destination_slugs: list[str] = []         # linked destination slugs
+    service_ids: list[int] = []               # linked service IDs
+    offer_ids: list[int] = []                 # linked offer IDs
+    media_urls: list[str] = []                # additional gallery photos/videos
 
 
 class DestinationCreate(BaseModel):
@@ -84,6 +93,14 @@ class ReviewCreate(BaseModel):
     body: str = Field(min_length=10, max_length=2000)
     trip_date: str | None = None  # e.g. "2024-11"
     media_urls: list[str] = []
+
+
+class CommentCreate(BaseModel):
+    entity_type: Literal["package", "destination", "service"]
+    entity_slug: str = Field(min_length=1, max_length=200)
+    name: str = Field(min_length=2, max_length=120)
+    email: str | None = None
+    body: str = Field(min_length=5, max_length=2000)
 
 
 class ReviewAdminReply(BaseModel):
@@ -175,6 +192,7 @@ class ServiceCreate(BaseModel):
     image_url: str = ""
     icon_url: str = ""
     image_alt: str = ""
+    price: float | None = None
     rating: float = Field(default=5.0, ge=0, le=5)
     review_count: int = Field(default=0, ge=0)
     highlight: str = ""
@@ -199,6 +217,7 @@ class ServiceUpdate(BaseModel):
     image_url: str | None = None
     icon_url: str | None = None
     image_alt: str | None = None
+    price: float | None = None
     rating: float | None = Field(default=None, ge=0, le=5)
     review_count: int | None = Field(default=None, ge=0)
     highlight: str | None = None

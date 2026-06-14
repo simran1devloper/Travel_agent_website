@@ -15,6 +15,7 @@ import { Route as SigninRouteImport } from './routes/signin'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as PackagesRouteImport } from './routes/packages'
 import { Route as OffersRouteImport } from './routes/offers'
+import { Route as ModeratorRouteImport } from './routes/moderator'
 import { Route as MemoriesRouteImport } from './routes/memories'
 import { Route as DestinationsRouteImport } from './routes/destinations'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -52,6 +53,11 @@ const PackagesRoute = PackagesRouteImport.update({
 const OffersRoute = OffersRouteImport.update({
   id: '/offers',
   path: '/offers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModeratorRoute = ModeratorRouteImport.update({
+  id: '/moderator',
+  path: '/moderator',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MemoriesRoute = MemoriesRouteImport.update({
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/moderator': typeof ModeratorRoute
   '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/moderator': typeof ModeratorRoute
   '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/destinations': typeof DestinationsRoute
   '/memories': typeof MemoriesRoute
+  '/moderator': typeof ModeratorRoute
   '/offers': typeof OffersRoute
   '/packages': typeof PackagesRoute
   '/services': typeof ServicesRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/moderator'
     | '/offers'
     | '/packages'
     | '/services'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/moderator'
     | '/offers'
     | '/packages'
     | '/services'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/destinations'
     | '/memories'
+    | '/moderator'
     | '/offers'
     | '/packages'
     | '/services'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DestinationsRoute: typeof DestinationsRoute
   MemoriesRoute: typeof MemoriesRoute
+  ModeratorRoute: typeof ModeratorRoute
   OffersRoute: typeof OffersRoute
   PackagesRoute: typeof PackagesRoute
   ServicesRoute: typeof ServicesRoute
@@ -254,6 +267,13 @@ declare module '@tanstack/react-router' {
       path: '/offers'
       fullPath: '/offers'
       preLoaderRoute: typeof OffersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/moderator': {
+      id: '/moderator'
+      path: '/moderator'
+      fullPath: '/moderator'
+      preLoaderRoute: typeof ModeratorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/memories': {
@@ -324,6 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DestinationsRoute: DestinationsRoute,
   MemoriesRoute: MemoriesRoute,
+  ModeratorRoute: ModeratorRoute,
   OffersRoute: OffersRoute,
   PackagesRoute: PackagesRoute,
   ServicesRoute: ServicesRoute,

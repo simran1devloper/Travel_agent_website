@@ -9,10 +9,15 @@ Import one of these functions as the argument to ``Depends()`` in a router:
 """
 from __future__ import annotations
 
-from fastapi import Request
+from typing import Any
 
-from ...application.auth_service import AuthService
+from fastapi import Depends, Header, HTTPException, Request, status
+
+from ...application.auth_service import LOCAL_ISS, AuthService
+from ...application.comment_service import CommentService
 from ...application.contact_service import ContactService
+from ...application.gdrive_service import GDriveService
+from ...application.system_settings_service import SystemSettingsService
 from ...application.customer_service import CustomerService
 from ...application.destination_service import DestinationService
 from ...application.faq_service import FaqService
@@ -35,6 +40,10 @@ def _c(request: Request):  # noqa: ANN001
 
 def get_auth_service(request: Request) -> AuthService:
     return _c(request).auth_service
+
+
+def get_comment_service(request: Request) -> CommentService:
+    return _c(request).comment_service
 
 
 def get_customer_service(request: Request) -> CustomerService:
@@ -95,3 +104,59 @@ def get_site_stat_service(request: Request) -> SiteStatService:
 
 def get_offer_service(request: Request) -> OfferService:
     return _c(request).offer_service
+
+
+def get_gdrive_service(request: Request) -> GDriveService:
+    return _c(request).gdrive_service
+
+
+def get_system_settings_service(request: Request) -> SystemSettingsService:
+    return _c(request).system_settings_service
+
+
+def get_current_admin_customer_id(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    user: dict[str, Any] | None = Depends(
+        lambda credentials=None: None
+    ),
+) -> int:
+    from ...config import get_settings
+    from .auth_adapter import optional_user as _optional_user
+
+    # Re-resolve the optional user from the request's authorization header
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from .auth_adapter import _decode_token
+
+    auth_header = request.headers.get("authorization", "")
+    token_user: dict[str, Any] | None = None
+    if auth_header.lower().startswith("bearer "):
+        token_str = auth_header[7:].strip()
+        try:
+            from fastapi.security.http import HTTPAuthorizationCredentials as Creds
+            creds = Creds(scheme="bearer", credentials=token_str)
+            token_user = _decode_token(creds)
+        except Exception:
+            pass
+
+    if token_user and token_user.get("iss") == LOCAL_ISS:
+        try:
+            return int(token_user["sub"])
+        except (KeyError, ValueError, TypeError):
+            pass
+
+    # Dev admin token bypass — find first admin customer in DB
+    settings = get_settings()
+    if x_admin_token == settings.admin_token:
+        container = request.app.state.container
+        with container.db.connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM customers WHERE role='admin' ORDER BY id LIMIT 1"
+            ).fetchone()
+        if row:
+            return int(row[0])
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Could not determine admin customer identity. Log in with a named admin account.",
+    )

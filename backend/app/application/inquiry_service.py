@@ -39,6 +39,8 @@ class InquiryService:
                 "travel_styles": payload.travel_styles,
                 "services": payload.services,
                 "preferred_dates": payload.preferred_dates,
+                "date_from": payload.date_from,
+                "date_to": payload.date_to,
                 "adults": payload.adults,
                 "children": payload.children,
                 "budget": payload.budget,
@@ -47,6 +49,7 @@ class InquiryService:
                 "inspiration": payload.inspiration,
                 "inspiration_links": payload.inspiration_links,
                 "trip_feel": payload.trip_feel,
+                "basket_items": payload.basket_items,
                 "created_at": now,
                 "updated_at": now,
             }

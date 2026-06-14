@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { AppAuthProvider } from "@/components/auth-provider";
+import { BasketSheet } from "@/components/basket-sheet";
 
 import appCss from "../styles.css?url";
 
@@ -133,6 +134,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AppAuthProvider>
         <Outlet />
+        <BasketSheet />
       </AppAuthProvider>
     </QueryClientProvider>
   );

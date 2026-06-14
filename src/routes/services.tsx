@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CommentBox } from "@/components/comment-box";
+import { ServiceReviewsSection } from "@/components/entity-reviews";
 import {
   ArrowUpRight,
   Award,
@@ -8,9 +11,12 @@ import {
   Headphones,
   Home,
   LockKeyhole,
+  Search,
   ShieldCheck,
+  ShoppingBag,
   Star,
 } from "lucide-react";
+import { useBasket } from "@/lib/basket";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { WhatsAppFab } from "@/components/whatsapp-fab";
@@ -232,16 +238,44 @@ const lightCards = new Set([
   "custom-trip",
 ]);
 
+const SERVICE_CATEGORIES = [
+  { id: "all", label: "All" },
+  { id: "planning", label: "Planning" },
+  { id: "travel", label: "Travel" },
+  { id: "experience", label: "Experience" },
+  { id: "documents", label: "Documents" },
+];
+
 function ServicesPage() {
   const { c } = useContent("services");
   const servicesQuery = useQuery({
     queryKey: ["services"],
     queryFn: api.services,
   });
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const services = (servicesQuery.data?.length ? servicesQuery.data : fallbackServices)
+  const allServices = (servicesQuery.data?.length ? servicesQuery.data : fallbackServices)
     .filter((service) => (service.status ?? "published") === "published")
     .filter((service) => service.show_services_page !== false);
+
+  const services = allServices.filter((service) => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !service.name.toLowerCase().includes(q) &&
+        !(service.short_description ?? service.description ?? "").toLowerCase().includes(q) &&
+        !(service.category ?? "").toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+    }
+    if (categoryFilter !== "all") {
+      const cat = (service.category ?? service.name ?? "").toLowerCase();
+      if (!cat.includes(categoryFilter)) return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -256,8 +290,49 @@ function ServicesPage() {
             Curated experiences. Seamless execution.
           </h2>
 
+          {/* Search + filter */}
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search services..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-full border border-[#d8c9b8] bg-white/80 py-2.5 pl-11 pr-5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-[#c76b2f]"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {SERVICE_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat.id)}
+                  className={`rounded-full border px-4 py-2 text-xs font-bold transition-all ${
+                    categoryFilter === cat.id
+                      ? "border-[#c76b2f] bg-[#c76b2f] text-white"
+                      : "border-[#d8c9b8] bg-white/60 text-foreground hover:border-[#c76b2f]"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {servicesQuery.isLoading ? (
             <ServiceGridSkeleton />
+          ) : services.length === 0 ? (
+            <div className="mt-8 rounded-2xl border border-dashed border-[#d8c9b8] py-16 text-center">
+              <p className="font-bold text-foreground">No services match your search.</p>
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setCategoryFilter("all"); }}
+                className="mt-4 rounded-full border border-[#d8c9b8] bg-white px-5 py-2 text-sm font-bold text-foreground hover:border-[#c76b2f] hover:text-[#c76b2f]"
+              >
+                Clear filters
+              </button>
+            </div>
           ) : (
             <div className="mt-6 grid auto-rows-[220px] grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-7">
               {services.slice(0, 12).map((service, index) => (
@@ -268,6 +343,9 @@ function ServicesPage() {
         </section>
 
         <PartnerAssistance />
+
+        {/* Per-service reviews + comments */}
+        <ServiceCommunitySection services={allServices} />
 
         <section className="section-shell flex flex-col items-center pb-10 pt-4 text-center">
           <Link
@@ -371,6 +449,8 @@ function ServiceCard({ service, index }: { service: ApiService; index: number })
     service.gallery?.find((item) => item.type === "photo")?.src ??
     fallbackImages[index % fallbackImages.length];
   const layout = cardLayouts[index % cardLayouts.length];
+  const { add: addToBasket, remove: removeFromBasket, has: inBasket } = useBasket();
+  const isInBasket = inBasket(service.id, "service");
 
   return (
     <motion.article
@@ -427,15 +507,42 @@ function ServiceCard({ service, index }: { service: ApiService; index: number })
         </p>
       </div>
 
-      {(service.cta_link || index === 1) && (
-        <a
-          href={service.cta_link?.startsWith("/") ? service.cta_link : "/contact"}
-          aria-label={`Start an inquiry for ${service.name}`}
-          className="absolute bottom-5 right-5 z-20 grid size-11 place-items-center rounded-full bg-[#d66f2f] text-white shadow-[0_12px_24px_rgba(199,107,47,0.3)] transition-transform group-hover:scale-105 focus-ring"
+      <div className="absolute bottom-5 right-5 z-20 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (isInBasket) {
+              removeFromBasket(service.id, "service");
+            } else {
+              addToBasket({
+                type: "service",
+                slug: service.id,
+                name: service.name,
+                image: image,
+              });
+            }
+          }}
+          aria-label={isInBasket ? `Remove ${service.name} from basket` : `Add ${service.name} to basket`}
+          className={`grid size-11 place-items-center rounded-full shadow-[0_12px_24px_rgba(0,0,0,0.2)] transition-all group-hover:scale-105 focus-ring ${
+            isInBasket
+              ? "bg-[#c76b2f] text-white"
+              : isLight
+                ? "bg-white/80 text-[#c76b2f] hover:bg-[#c76b2f] hover:text-white"
+                : "bg-white/14 text-white hover:bg-[#c76b2f]"
+          }`}
         >
-          <ArrowUpRight className="size-5" />
-        </a>
-      )}
+          <ShoppingBag className="size-5" />
+        </button>
+        {(service.cta_link || index === 1) && (
+          <a
+            href={service.cta_link?.startsWith("/") ? service.cta_link : "/contact"}
+            aria-label={`Start an inquiry for ${service.name}`}
+            className="grid size-11 place-items-center rounded-full bg-[#d66f2f] text-white shadow-[0_12px_24px_rgba(199,107,47,0.3)] transition-transform group-hover:scale-105 focus-ring"
+          >
+            <ArrowUpRight className="size-5" />
+          </a>
+        )}
+      </div>
     </motion.article>
   );
 }
@@ -489,6 +596,42 @@ function PartnerAssistance() {
           Learn more
           <ArrowUpRight className="size-3.5" />
         </Link>
+      </div>
+    </section>
+  );
+}
+
+function ServiceCommunitySection({ services }: { services: ApiService[] }) {
+  const [selectedId, setSelectedId] = useState(services[0]?.id ?? "");
+  const selectedService = services.find((s) => s.id === selectedId) ?? services[0];
+
+  if (!selectedService) return null;
+
+  return (
+    <section className="section-shell border-t border-[#d8c9b8] py-12">
+      <h2 className="text-2xl font-bold tracking-tight">Community Reviews &amp; Comments</h2>
+      <p className="mt-2 text-sm text-[#59606a]">Select a service to see what travelers are saying.</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {services.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSelectedId(s.id)}
+            className={`rounded-full border px-4 py-1.5 text-xs font-bold transition-all ${
+              selectedId === s.id
+                ? "border-[#c76b2f] bg-[#c76b2f] text-white"
+                : "border-[#d8c9b8] bg-white/60 text-foreground hover:border-[#c76b2f]"
+            }`}
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-8 space-y-8">
+        <ServiceReviewsSection slug={selectedService.id} name={selectedService.name} />
+        <CommentBox entityType="service" entitySlug={selectedService.id} />
       </div>
     </section>
   );

@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...application.auth_service import LOCAL_ISS
@@ -180,6 +180,54 @@ def require_admin(
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Admin role or manage:admin permission required",
+    )
+
+
+def require_superadmin(
+    request: Request,
+    x_admin_token: str | None = Header(default=None),
+    user: dict[str, Any] | None = Depends(optional_user),
+) -> None:
+    """Raise 403 unless the caller is the designated super admin.
+
+    Dev bypass: the configured admin token always passes (allows dev tooling without
+    a real superadmin account).  In production, the caller must be a JWT-authenticated
+    customer with ``is_superadmin = 1`` in the database.
+    """
+    settings = get_settings()
+    if x_admin_token == settings.admin_token:
+        return  # dev bypass
+    if user and user.get("iss") == LOCAL_ISS:
+        try:
+            customer_id = int(user["sub"])
+            container = request.app.state.container
+            with container.db.connect() as conn:
+                row = conn.execute(
+                    "SELECT is_superadmin FROM customers WHERE id = ?", (customer_id,)
+                ).fetchone()
+            if row and row[0]:
+                return
+        except Exception:
+            pass
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Only the super admin can perform this action.",
+    )
+
+
+def require_moderator(
+    x_admin_token: str | None = Header(default=None),
+    user: dict[str, Any] | None = Depends(optional_user),
+) -> None:
+    """Allow moderators, admins, and the dev admin token."""
+    settings = get_settings()
+    if x_admin_token == settings.admin_token:
+        return
+    if _roles(user) & {"admin", "moderator"} or "manage:admin" in _permissions(user):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Moderator or admin role required",
     )
 
 

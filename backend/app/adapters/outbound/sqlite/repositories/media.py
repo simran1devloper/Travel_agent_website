@@ -35,17 +35,44 @@ class SQLiteMediaRepository(IMediaRepository):
                 """
                 INSERT INTO media
                 (filename, url, content_type, size_bytes, alt_text,
-                 owner_type, owner_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 owner_type, owner_id, moderation_status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data["filename"], data["url"], data.get("content_type"),
                     data.get("size_bytes"), data.get("alt_text"),
                     data.get("owner_type"), data.get("owner_id"),
+                    data.get("moderation_status", "pending"),
                     data["created_at"],
                 ),
             )
         return int(cur.lastrowid)
+
+    def update_moderation(self, media_id: int, status: str) -> None:
+        with self._db.connect() as conn:
+            conn.execute(
+                "UPDATE media SET moderation_status = ? WHERE id = ?",
+                (status, media_id),
+            )
+
+    def list_user_media(
+        self, page: int, per_page: int, status: str | None = None
+    ) -> tuple[list[dict[str, Any]], int]:
+        offset = (page - 1) * per_page
+        where = "WHERE owner_type = 'customer'"
+        params: list[Any] = []
+        if status:
+            where += " AND moderation_status = ?"
+            params.append(status)
+        with self._db.connect() as conn:
+            total = int(conn.execute(
+                f"SELECT COUNT(*) FROM media {where}", params  # noqa: S608
+            ).fetchone()[0])
+            rows = conn.execute(
+                f"SELECT * FROM media {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",  # noqa: S608
+                [*params, per_page, offset],
+            ).fetchall()
+        return ([row_to_dict(r) for r in rows], total)  # type: ignore[misc]
 
     def update(self, media_id: int, data: dict[str, Any]) -> None:
         with self._db.connect() as conn:
