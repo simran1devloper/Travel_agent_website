@@ -129,7 +129,7 @@ function UserMenu() {
 
   const isAuth0Authed = auth0?.isAuthenticated ?? false;
   const isLoggedIn = !!localUser || isAuth0Authed;
-  const isAdmin = localUser?.role === "admin";
+  const isAdmin = localUser?.role === "admin" || localUser?.role === "superadmin";
   const displayName = localUser?.name ?? auth0?.user?.name ?? auth0?.user?.email ?? "You";
   const initials = displayName.slice(0, 2).toUpperCase();
 
@@ -254,7 +254,7 @@ function MobileUserLinks({ onClose }: { onClose: () => void }) {
 
   const isAuth0Authed = auth0?.isAuthenticated ?? false;
   const isLoggedIn = !!localUser || isAuth0Authed;
-  const isAdmin = localUser?.role === "admin";
+  const isAdmin = localUser?.role === "admin" || localUser?.role === "superadmin";
 
   const handleLogout = () => {
     localLogout();

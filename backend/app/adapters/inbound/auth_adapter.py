@@ -175,7 +175,7 @@ def require_admin(
     settings = get_settings()
     if x_admin_token == settings.admin_token:
         return
-    if "admin" in _roles(user) or "manage:admin" in _permissions(user):
+    if _roles(user) & {"admin", "superadmin"} or "manage:admin" in _permissions(user):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -185,18 +185,13 @@ def require_admin(
 
 def require_superadmin(
     request: Request,
-    x_admin_token: str | None = Header(default=None),
     user: dict[str, Any] | None = Depends(optional_user),
 ) -> None:
-    """Raise 403 unless the caller is the designated super admin.
+    """Raise 403 unless the caller is a JWT-authenticated superadmin.
 
-    Dev bypass: the configured admin token always passes (allows dev tooling without
-    a real superadmin account).  In production, the caller must be a JWT-authenticated
-    customer with ``is_superadmin = 1`` in the database.
+    No dev-token bypass — superadmin access always requires a real JWT with
+    is_superadmin=1 in the database (local auth) or the superadmin role (Auth0).
     """
-    settings = get_settings()
-    if x_admin_token == settings.admin_token:
-        return  # dev bypass
     if user and user.get("iss") == LOCAL_ISS:
         try:
             customer_id = int(user["sub"])
@@ -209,6 +204,8 @@ def require_superadmin(
                 return
         except Exception:
             pass
+    if user and "superadmin" in _roles(user) and "manage:admin" in _permissions(user):
+        return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Only the super admin can perform this action.",
@@ -223,7 +220,7 @@ def require_moderator(
     settings = get_settings()
     if x_admin_token == settings.admin_token:
         return
-    if _roles(user) & {"admin", "moderator"} or "manage:admin" in _permissions(user):
+    if _roles(user) & {"admin", "moderator", "superadmin"} or "manage:admin" in _permissions(user):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

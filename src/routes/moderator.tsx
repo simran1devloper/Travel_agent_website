@@ -20,7 +20,7 @@ export const Route = createFileRoute("/moderator")({
 function ModeratorPage() {
   const { localUser } = useLocalAuth();
 
-  if (localUser?.role === "admin" || localUser?.role === "moderator") {
+  if (localUser?.role === "admin" || localUser?.role === "moderator" || localUser?.role === "superadmin") {
     return <ModeratorContent />;
   }
 

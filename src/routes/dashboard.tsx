@@ -115,7 +115,7 @@ function DashboardContent() {
   return (
     <PageShell eyebrow={`Welcome back, ${customerName}`} title="Your travel archive.">
       {/* Moderator / admin shortcut */}
-      {(localUser?.role === "moderator" || localUser?.role === "admin") && (
+      {(localUser?.role === "moderator" || localUser?.role === "admin" || localUser?.role === "superadmin") && (
         <div className="mb-8 flex items-center gap-3 rounded-xl border border-border bg-muted/40 px-5 py-3">
           <MessageSquare className="size-5 text-muted-foreground" />
           <p className="text-sm font-medium flex-1">You have moderator access.</p>

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useLocalAuth } from "@/components/auth-provider";
+import { getLocalToken } from "@/lib/local-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from "react";
 import { useAdminTabPref } from "@/lib/user-prefs";
@@ -552,8 +553,8 @@ type AdminTab =
 function AdminPage() {
   const { localUser } = useLocalAuth();
 
-  // Local admin — grant access immediately
-  if (localUser?.role === "admin") return <AdminContent />;
+  // Local admin / superadmin — grant access immediately
+  if (localUser?.role === "admin" || localUser?.role === "superadmin") return <AdminContent />;
 
   // Local non-admin signed in — show clear denial, not Auth0 gate
   if (localUser) {
@@ -6914,10 +6915,19 @@ const STORAGE_BACKEND_META: Record<string, { label: string; description: string 
   r2: { label: "Cloudflare R2", description: "S3-compatible object storage with global CDN." },
 };
 
-const ADMIN_HEADERS = { "x-admin-token": "dev-admin-token" };
-
 function SettingsTab() {
   const queryClient = useQueryClient();
+  const { localUser } = useLocalAuth();
+  const isSuperAdmin = localUser?.role === "superadmin";
+
+  // Build headers: always include dev-admin-token; also attach JWT so the
+  // backend can verify is_superadmin from DB on write endpoints.
+  const ADMIN_HEADERS = (() => {
+    const h: Record<string, string> = { "x-admin-token": "dev-admin-token" };
+    const jwt = getLocalToken();
+    if (jwt) h["Authorization"] = `Bearer ${jwt}`;
+    return h;
+  })();
 
   const { data: sysData, refetch: refetchSettings } = useQuery({
     queryKey: ["system-settings"],
@@ -6945,7 +6955,6 @@ function SettingsTab() {
   });
 
   const settings = sysData?.settings ?? {};
-  const isSuperAdmin = sysData?.is_superadmin ?? false;
   const secretsStoreInfo = sysData?.secrets_store;
   const availableKeys = new Set((backends?.backends ?? []).map((b) => b.key));
   const isConnected = gdriveStatus?.connected ?? false;
