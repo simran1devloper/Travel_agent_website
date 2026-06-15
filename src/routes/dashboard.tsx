@@ -8,7 +8,6 @@ import { MemoryForm } from "@/components/memory-form";
 import { StarRating } from "@/components/star-rating";
 import { useLocalAuth } from "@/components/auth-provider";
 import { api, type ApiReview, type ApiMemory } from "@/lib/api";
-import { AUTH0_ENABLED } from "@/lib/auth-config";
 import {
   Heart,
   MapPin,
@@ -39,10 +38,10 @@ export const Route = createFileRoute("/dashboard")({
 type Tab = "overview" | "memories" | "reviews";
 
 function DashboardPage() {
-  const { localUser } = useLocalAuth();
+  const { localUser, auth0Enabled } = useLocalAuth();
   if (localUser) return <DashboardContent />;
 
-  if (AUTH0_ENABLED) {
+  if (auth0Enabled) {
     if (typeof window === "undefined") {
       return (
         <PageShell eyebrow="Traveler access" title="Checking your session..." children={null} />

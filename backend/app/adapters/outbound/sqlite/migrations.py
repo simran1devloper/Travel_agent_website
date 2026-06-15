@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   public_id TEXT NOT NULL UNIQUE,
   customer_id INTEGER NOT NULL,
-  package_slug TEXT NOT NULL,
+  package_slug TEXT,
   rating INTEGER NOT NULL,
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'approved',

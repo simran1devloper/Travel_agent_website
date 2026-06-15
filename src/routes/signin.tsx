@@ -5,12 +5,23 @@ import { useEffect, useState } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNav } from "@/components/site-nav";
 import { useLocalAuth } from "@/components/auth-provider";
-import { AUTH0_ENABLED } from "@/lib/auth-config";
-import { api } from "@/lib/api";
+import { api, API_BASE_URL } from "@/lib/api";
+
+type SigninSearch = {
+  mode: "login" | "signup";
+  token?: string;
+  name?: string;
+  role?: string;
+  google_error?: string;
+};
 
 export const Route = createFileRoute("/signin")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): SigninSearch => ({
     mode: (search.mode as string) === "signup" ? "signup" : "login",
+    token: (search.token as string) || undefined,
+    name: (search.name as string) || undefined,
+    role: (search.role as string) || undefined,
+    google_error: (search.google_error as string) || undefined,
   }),
   head: () => ({
     meta: [{ title: "Sign In — JourneyMakers" }, { name: "robots", content: "noindex" }],
@@ -27,21 +38,41 @@ function AuthPage() {
 
 function AuthCard({ initialMode }: { initialMode: Mode }) {
   const [mode, setMode] = useState<Mode>(initialMode);
-  const { localUser, localLogin, localLogout } = useLocalAuth();
+  const { localUser, localLogin, localLogout, auth0Enabled, googleAvailable } = useLocalAuth();
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
-  // Auth0 — AUTH0_ENABLED is a build-time constant so hook order is stable
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const auth0 = AUTH0_ENABLED ? useAuth0Hook() : null;
-  const isAuth0Authed = auth0?.isAuthenticated ?? false;
+  // useAuth0 is safe to call even outside Auth0Provider — returns stub context
+  // (isAuthenticated: false, user: undefined). We gate all auth0 calls on auth0Enabled.
+  const auth0 = useAuth0Hook();
+  const isAuth0Authed = auth0Enabled && auth0.isAuthenticated;
 
   const isLoggedIn = !!localUser || isAuth0Authed;
-  const displayName = localUser?.name ?? auth0?.user?.name ?? auth0?.user?.email ?? "";
+  const displayName = localUser?.name ?? auth0.user?.name ?? auth0.user?.email ?? "";
 
   const handleLogout = () => {
     localLogout();
-    if (isAuth0Authed) auth0?.logout({ logoutParams: { returnTo: window.location.origin } });
+    if (isAuth0Authed) auth0.logout({ logoutParams: { returnTo: window.location.origin } });
   };
+
+  // Handle Google OAuth callback: ?token=<jwt>&name=<name>&role=<role>
+  useEffect(() => {
+    if (search.token) {
+      localLogin(search.token);
+      const dest = search.role === "admin" || search.role === "superadmin" ? "/admin" : "/dashboard";
+      void navigate({ to: dest });
+    }
+    if (search.google_error) {
+      const msgs: Record<string, string> = {
+        not_configured: "Google sign-in is not configured. Ask the admin to add credentials in Settings.",
+        token_exchange_failed: "Google sign-in failed. Please try again.",
+        no_email: "Google did not return an email address. Check your Google account settings.",
+        db_error: "A server error occurred. Please try again.",
+      };
+      setGoogleError(msgs[search.google_error] ?? "Google sign-in failed.");
+    }
+  }, []);
 
   useEffect(() => {
     if (isAuth0Authed) navigate({ to: "/dashboard" });
@@ -98,15 +129,40 @@ function AuthCard({ initialMode }: { initialMode: Mode }) {
                   />
                 )}
 
-                {AUTH0_ENABLED && (
+                {/* Auth0 Google button */}
+                {auth0Enabled && (
                   <>
                     <div className="my-6 flex items-center gap-3">
                       <div className="h-px flex-1 bg-border" />
                       <span className="text-xs font-semibold text-muted-foreground">or</span>
                       <div className="h-px flex-1 bg-border" />
                     </div>
-                    <GoogleButton auth0={auth0!} />
+                    <GoogleButton auth0={auth0} />
                   </>
+                )}
+
+                {/* Local Google OAuth button (when superadmin has configured credentials) */}
+                {!auth0Enabled && googleAvailable && (
+                  <>
+                    <div className="my-6 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs font-semibold text-muted-foreground">or</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    <a
+                      href={`${API_BASE_URL}/auth/google`}
+                      className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold text-foreground shadow-sm hover:bg-gray-50 transition-colors"
+                    >
+                      <GoogleIcon />
+                      Continue with Google
+                    </a>
+                  </>
+                )}
+
+                {googleError && (
+                  <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+                    {googleError}
+                  </p>
                 )}
 
                 <p className="mt-6 text-center text-sm text-muted-foreground">

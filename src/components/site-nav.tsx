@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Menu, X, LayoutDashboard, ShieldCheck, LogOut, User } from "lucide-react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useLocalAuth } from "@/components/auth-provider";
-import { AUTH0_ENABLED } from "@/lib/auth-config";
 
 const links = [
   { to: "/", label: "Home" },
@@ -120,17 +119,15 @@ export function SiteNav() {
 // ── Desktop user menu (avatar + dropdown) ─────────────────────────────────────
 
 function UserMenu() {
-  const { localUser, localLogout } = useLocalAuth();
-  // AUTH0_ENABLED is a build-time constant — hook order is stable across renders
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const auth0 = AUTH0_ENABLED ? useAuth0() : null;
+  const { localUser, localLogout, auth0Enabled } = useLocalAuth();
+  const auth0 = useAuth0();
   const [dropOpen, setDropOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const isAuth0Authed = auth0?.isAuthenticated ?? false;
+  const isAuth0Authed = auth0Enabled && auth0.isAuthenticated;
   const isLoggedIn = !!localUser || isAuth0Authed;
   const isAdmin = localUser?.role === "admin" || localUser?.role === "superadmin";
-  const displayName = localUser?.name ?? auth0?.user?.name ?? auth0?.user?.email ?? "You";
+  const displayName = localUser?.name ?? auth0.user?.name ?? auth0.user?.email ?? "You";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   // Close dropdown on outside click
@@ -144,7 +141,7 @@ function UserMenu() {
 
   const handleLogout = () => {
     localLogout();
-    if (isAuth0Authed) auth0?.logout({ logoutParams: { returnTo: window.location.origin } });
+    if (isAuth0Authed) auth0.logout({ logoutParams: { returnTo: window.location.origin } });
     setDropOpen(false);
   };
 
@@ -247,18 +244,16 @@ function DropItem({
 // ── Mobile user links (inside hamburger menu) ─────────────────────────────────
 
 function MobileUserLinks({ onClose }: { onClose: () => void }) {
-  const { localUser, localLogout } = useLocalAuth();
-  // AUTH0_ENABLED is a build-time constant — hook order is stable across renders
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const auth0 = AUTH0_ENABLED ? useAuth0() : null;
+  const { localUser, localLogout, auth0Enabled } = useLocalAuth();
+  const auth0 = useAuth0();
 
-  const isAuth0Authed = auth0?.isAuthenticated ?? false;
+  const isAuth0Authed = auth0Enabled && auth0.isAuthenticated;
   const isLoggedIn = !!localUser || isAuth0Authed;
   const isAdmin = localUser?.role === "admin" || localUser?.role === "superadmin";
 
   const handleLogout = () => {
     localLogout();
-    if (isAuth0Authed) auth0?.logout({ logoutParams: { returnTo: window.location.origin } });
+    if (isAuth0Authed) auth0.logout({ logoutParams: { returnTo: window.location.origin } });
     onClose();
   };
 
