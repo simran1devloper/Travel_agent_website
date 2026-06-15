@@ -20,6 +20,7 @@ class Settings(BaseModel):
     admin_token: str = os.getenv("JOURNEYMAKERS_ADMIN_TOKEN", "dev-admin-token")
     customer_token: str = os.getenv("JOURNEYMAKERS_CUSTOMER_TOKEN", "dev-customer-token")
     auth0_domain: str = os.getenv("AUTH0_DOMAIN", "")
+    auth0_client_id: str = os.getenv("AUTH0_CLIENT_ID", "")
     auth0_audience: str = os.getenv("AUTH0_AUDIENCE", "")
     auth0_algorithms: list[str] = ["RS256"]
     auth0_roles_claim: str = os.getenv("AUTH0_ROLES_CLAIM", "https://journeymakers.travel/roles")
@@ -49,6 +50,10 @@ class Settings(BaseModel):
     google_redirect_uri: str = os.getenv(
         "GOOGLE_REDIRECT_URI", "http://localhost:8000/admin/gdrive/callback"
     )
+    google_signin_redirect_uri: str = os.getenv(
+        "GOOGLE_SIGNIN_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
+    )
+    frontend_url: str = os.getenv("JOURNEYMAKERS_FRONTEND_URL", "http://localhost:5173")
 
     # Cloudflare R2 (S3-compatible object storage)
     r2_account_id: str = os.getenv("R2_ACCOUNT_ID", "")

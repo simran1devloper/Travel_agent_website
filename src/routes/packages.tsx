@@ -724,9 +724,10 @@ function DestinationStoryCard({
   const router = useRouter();
 
   function isInteractiveTarget(target: EventTarget | null) {
-    return target instanceof HTMLElement
-      ? target.closest('a, button, input, select, textarea, [role="button"]') !== null
-      : false;
+    const el = (target instanceof HTMLElement || target instanceof SVGElement)
+      ? (target as Element)
+      : null;
+    return el ? el.closest('a, button, input, select, textarea, [role="button"]') !== null : false;
   }
 
   function openBookingPage() {
@@ -1620,6 +1621,7 @@ function PackageReviewsSection({ slug, title }: { slug: string; title: string })
             </button>
           )}
           <button
+            type="button"
             onClick={() => setShowForm(true)}
             className="inline-flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:bg-accent transition-colors"
           >

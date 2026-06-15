@@ -30,7 +30,6 @@ import {
   type ApiInquiry,
   type ApiComment,
 } from "@/lib/api";
-import { AUTH0_ENABLED } from "@/lib/auth-config";
 import { useStorageBackend } from "@/hooks/useStorageBackend";
 import { StorageBackendPicker } from "@/components/storage-backend-picker";
 import {
@@ -551,7 +550,7 @@ type AdminTab =
   | "settings";
 
 function AdminPage() {
-  const { localUser } = useLocalAuth();
+  const { localUser, auth0Enabled } = useLocalAuth();
 
   // Local admin / superadmin — grant access immediately
   if (localUser?.role === "admin" || localUser?.role === "superadmin") return <AdminContent />;
@@ -583,7 +582,7 @@ function AdminPage() {
   }
 
   // Not signed in at all — check Auth0
-  if (AUTH0_ENABLED) {
+  if (auth0Enabled) {
     if (typeof window === "undefined") {
       return (
         <PageShell eyebrow="System" title="Checking access...">
@@ -7117,6 +7116,49 @@ function SettingsTab() {
     }
   }
 
+  // ── Auth0 credentials form ────────────────────────────────────────────────
+  const [auth0Form, setAuth0Form] = useState({ "auth0.domain": "", "auth0.client_id": "", "auth0.audience": "" });
+  const [auth0Saving, setAuth0Saving] = useState(false);
+  const [auth0Msg, setAuth0Msg] = useState<string | null>(null);
+  const [auth0Success, setAuth0Success] = useState(false);
+
+  useEffect(() => {
+    setAuth0Form((prev) => ({
+      "auth0.domain": settings["auth0.domain"] || prev["auth0.domain"],
+      "auth0.client_id": settings["auth0.client_id"] || prev["auth0.client_id"],
+      "auth0.audience": settings["auth0.audience"] || prev["auth0.audience"],
+    }));
+  }, [settings]);
+
+  async function handleSaveAuth0() {
+    setAuth0Saving(true);
+    setAuth0Msg(null);
+    setAuth0Success(false);
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(auth0Form)) {
+      if (v) payload[k] = v;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/system-settings`, {
+        method: "PATCH",
+        headers: { ...ADMIN_HEADERS, "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        setAuth0Msg(d.detail ?? "Failed to save.");
+      } else {
+        setAuth0Success(true);
+        setAuth0Msg("Auth0 credentials saved. Reload the page for the sign-in button to appear.");
+        void refetchSettings();
+      }
+    } catch {
+      setAuth0Msg("Could not reach the API.");
+    } finally {
+      setAuth0Saving(false);
+    }
+  }
+
   // ── Google OAuth app credentials form ────────────────────────────────────
   const [googleForm, setGoogleForm] = useState({ "google.client_id": "", "google.client_secret": "" });
   const [googleSaving, setGoogleSaving] = useState(false);
@@ -7410,6 +7452,48 @@ function SettingsTab() {
             void refetchSettings();
           }}
         />
+      </div>
+
+      {/* Auth0 credentials */}
+      <div className="rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h3 className="mb-1 text-sm font-bold">Auth0 — Social Sign-in</h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Configure Auth0 to enable "Sign in with Google" (and other social providers) via the Auth0
+          dashboard. These are stored in the secrets manager and served to the frontend at runtime —
+          no redeploy needed. Get your credentials from{" "}
+          <span className="font-mono">manage.auth0.com → Applications</span>.
+        </p>
+        <div className="grid gap-3">
+          {([
+            { key: "auth0.domain" as const, label: "Domain", placeholder: "your-tenant.auth0.com" },
+            { key: "auth0.client_id" as const, label: "Client ID", placeholder: "abc123…" },
+            { key: "auth0.audience" as const, label: "Audience (optional)", placeholder: "https://api.yourapp.com" },
+          ]).map(({ key, label, placeholder }) => (
+            <div key={key}>
+              <label className="mb-1 block text-xs font-semibold text-foreground">{label}</label>
+              <input
+                type="text"
+                value={auth0Form[key]}
+                onChange={(e) => setAuth0Form((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
+                className="w-full rounded-lg border border-border bg-secondary/10 px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </div>
+          ))}
+        </div>
+        {auth0Msg && (
+          <p className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-medium ${auth0Success ? "bg-green-50 text-green-800" : "bg-destructive/10 text-destructive"}`}>
+            {auth0Msg}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={() => void handleSaveAuth0()}
+          disabled={auth0Saving}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-foreground px-5 py-2.5 text-sm font-bold text-background hover:opacity-80 disabled:opacity-50 transition-opacity"
+        >
+          {auth0Saving ? "Saving…" : "Save Auth0 credentials"}
+        </button>
       </div>
 
       {/* Google OAuth app credentials */}

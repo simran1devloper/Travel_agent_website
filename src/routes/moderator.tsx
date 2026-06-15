@@ -5,7 +5,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
 import { PageShell } from "@/components/page-shell";
 import { api, type ModeratorReview, type ModeratorInquiry, type ModeratorMedia } from "@/lib/api";
-import { AUTH0_ENABLED } from "@/lib/auth-config";
 import { CheckCircle2, XCircle, MessageSquare, FileText, ChevronLeft, ChevronRight, Image } from "lucide-react";
 
 export const Route = createFileRoute("/moderator")({
@@ -18,7 +17,7 @@ export const Route = createFileRoute("/moderator")({
 // ── Auth gate ────────────────────────────────────────────────────────────────
 
 function ModeratorPage() {
-  const { localUser } = useLocalAuth();
+  const { localUser, auth0Enabled } = useLocalAuth();
 
   if (localUser?.role === "admin" || localUser?.role === "moderator" || localUser?.role === "superadmin") {
     return <ModeratorContent />;
@@ -42,7 +41,7 @@ function ModeratorPage() {
     );
   }
 
-  if (AUTH0_ENABLED) {
+  if (auth0Enabled) {
     return <ModeratorAuthGate />;
   }
 

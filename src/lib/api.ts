@@ -1,3 +1,5 @@
+import { getLocalToken } from "./local-auth";
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 export const CUSTOMER_TOKEN = import.meta.env.VITE_CUSTOMER_TOKEN ?? "dev-customer-token";
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? "dev-admin-token";
@@ -38,7 +40,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers.set("authorization", `Bearer ${accessToken}`);
   } else {
     if (options.admin) headers.set("x-admin-token", ADMIN_TOKEN);
-    if (options.customer) headers.set("x-customer-token", CUSTOMER_TOKEN);
+    if (options.customer) {
+      // Prefer local JWT so the backend associates the request with the right user.
+      // Fall back to the dev bypass token when no one is logged in locally.
+      const localJwt = getLocalToken();
+      if (localJwt) {
+        headers.set("authorization", `Bearer ${localJwt}`);
+      } else {
+        headers.set("x-customer-token", CUSTOMER_TOKEN);
+      }
+    }
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
