@@ -267,52 +267,46 @@ CREATE TABLE IF NOT EXISTS comments (
 """
 
 _ALTERS = [
+    # customers — extended beyond base DDL
     "ALTER TABLE customers ADD COLUMN auth0_sub TEXT",
     "ALTER TABLE customers ADD COLUMN password_hash TEXT",
     "ALTER TABLE customers ADD COLUMN username TEXT",
     "ALTER TABLE customers ADD COLUMN role TEXT DEFAULT 'user'",
-    "ALTER TABLE media ADD COLUMN owner_id INTEGER",
+    "ALTER TABLE customers ADD COLUMN gdrive_refresh_token TEXT",
+    "ALTER TABLE customers ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0",
+
+    # planners
+    "ALTER TABLE planners ADD COLUMN photo_url TEXT",
+
+    # reviews — incremental additions
     "ALTER TABLE reviews ADD COLUMN flag_reason TEXT",
     "ALTER TABLE reviews ADD COLUMN updated_at TEXT",
-    "ALTER TABLE planners ADD COLUMN photo_url TEXT",
     "ALTER TABLE reviews ADD COLUMN title TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE reviews ADD COLUMN trip_date TEXT",
     "ALTER TABLE reviews ADD COLUMN helpful_count INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE reviews ADD COLUMN admin_reply TEXT",
     "ALTER TABLE reviews ADD COLUMN verified INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE services ADD COLUMN category TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN short_description TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN detailed_description TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN image_url TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN icon_url TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN image_alt TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN badge_text TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE services ADD COLUMN cta_text TEXT NOT NULL DEFAULT 'Explore'",
-    "ALTER TABLE services ADD COLUMN cta_link TEXT NOT NULL DEFAULT '/services'",
-    "ALTER TABLE services ADD COLUMN show_homepage INTEGER NOT NULL DEFAULT 1",
-    "ALTER TABLE services ADD COLUMN show_services_page INTEGER NOT NULL DEFAULT 1",
-    "ALTER TABLE services ADD COLUMN show_hero_card INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE services ADD COLUMN show_footer INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE services ADD COLUMN status TEXT NOT NULL DEFAULT 'published'",
+    "ALTER TABLE reviews ADD COLUMN moderation_note TEXT",
+    "ALTER TABLE reviews ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'package'",
+    "ALTER TABLE reviews ADD COLUMN entity_slug TEXT",
+
+    # inquiries
     "ALTER TABLE inquiries ADD COLUMN date_from TEXT",
     "ALTER TABLE inquiries ADD COLUMN date_to TEXT",
     "ALTER TABLE inquiries ADD COLUMN basket_items TEXT NOT NULL DEFAULT '[]'",
-    "ALTER TABLE customers ADD COLUMN gdrive_refresh_token TEXT",
-    "ALTER TABLE customers ADD COLUMN is_superadmin INTEGER NOT NULL DEFAULT 0",
-    "ALTER TABLE services ADD COLUMN price REAL",
-    "ALTER TABLE reviews ADD COLUMN moderation_note TEXT",
     "ALTER TABLE inquiries ADD COLUMN moderator_note TEXT",
-    # Item 10: package card_type + linked entities
+
+    # packages — linked entities + media gallery
     "ALTER TABLE packages ADD COLUMN card_type TEXT NOT NULL DEFAULT 'normal'",
     "ALTER TABLE packages ADD COLUMN destination_slugs TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE packages ADD COLUMN service_ids TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE packages ADD COLUMN offer_ids TEXT NOT NULL DEFAULT '[]'",
-    # Reviews on destinations + services
-    "ALTER TABLE reviews ADD COLUMN entity_type TEXT NOT NULL DEFAULT 'package'",
-    "ALTER TABLE reviews ADD COLUMN entity_slug TEXT",
-    # Multi-media gallery for packages
     "ALTER TABLE packages ADD COLUMN media_urls TEXT NOT NULL DEFAULT '[]'",
-    # Media moderation — user uploads start as pending
+
+    # services — price added after initial launch
+    "ALTER TABLE services ADD COLUMN price REAL",
+
+    # media — moderation column; user uploads start as pending
     "ALTER TABLE media ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'pending'",
 ]
 
