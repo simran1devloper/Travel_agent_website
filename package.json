@@ -7,6 +7,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "postbuild": "mkdir -p dist/server/.wrangler/deploy && echo '{\"configPath\":\"../../wrangler.json\",\"auxiliaryWorkers\":[]}' > dist/server/.wrangler/deploy/config.json",
+    "deploy": "npm run build && sh -c 'cd dist/server && npx wrangler deploy'",
     "backend:dev": "uvicorn backend.app.main:app --reload --port 8000",
     "preview": "vite preview",
     "lint": "eslint .",
