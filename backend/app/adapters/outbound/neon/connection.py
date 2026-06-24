@@ -55,20 +55,28 @@ class _PgCursor:
 
     def execute(self, sql: str, params: tuple = ()) -> "_PgCursor":
         translated = _translate_sql(sql)
-        self._cur.execute(translated, params)
-        # Capture RETURNING id only for INSERT/UPDATE/DELETE — never for SELECT
         sql_stripped = sql.strip().upper()
-        is_returning = (
-            "RETURNING" in sql_stripped
-            and not sql_stripped.startswith("SELECT")
-        )
-        if is_returning and self._cur.description and "id" in [d[0] for d in self._cur.description]:
-            try:
-                row = self._cur.fetchone()
-                if row:
-                    self.lastrowid = row[0]
-            except Exception:
-                pass
+
+        # Auto-append RETURNING id to plain INSERT statements so that
+        # cur.lastrowid works exactly like sqlite3.Cursor (no repo changes needed).
+        is_insert = sql_stripped.startswith("INSERT")
+        already_has_returning = "RETURNING" in sql_stripped
+        if is_insert and not already_has_returning:
+            translated += " RETURNING id"
+
+        self._cur.execute(translated, params)
+
+        # Capture lastrowid whenever the result contains an 'id' column
+        # (covers both explicit RETURNING and the auto-appended case above).
+        if self._cur.description:
+            col_names = [d[0] for d in self._cur.description]
+            if "id" in col_names:
+                try:
+                    row = self._cur.fetchone()
+                    if row:
+                        self.lastrowid = row[col_names.index("id")]
+                except Exception:
+                    pass
         return self
 
     def fetchone(self) -> _PgRow | None:
