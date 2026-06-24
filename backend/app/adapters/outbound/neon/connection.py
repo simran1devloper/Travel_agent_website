@@ -50,8 +50,13 @@ class _PgCursor:
     def execute(self, sql: str, params: tuple = ()) -> "_PgCursor":
         translated = _translate_sql(sql)
         self._cur.execute(translated, params)
-        # Capture RETURNING id if present
-        if self._cur.description and "id" in [d[0] for d in self._cur.description]:
+        # Capture RETURNING id only for INSERT/UPDATE/DELETE — never for SELECT
+        sql_stripped = sql.strip().upper()
+        is_returning = (
+            "RETURNING" in sql_stripped
+            and not sql_stripped.startswith("SELECT")
+        )
+        if is_returning and self._cur.description and "id" in [d[0] for d in self._cur.description]:
             try:
                 row = self._cur.fetchone()
                 if row:

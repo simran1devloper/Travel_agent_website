@@ -138,9 +138,10 @@ def seed_neon(settings) -> list[dict]:
         row = cur.fetchone()
         if row:
             customer_id = row["id"]
+            pw_hash = hash_password(account["password"])
             cur.execute(
-                "UPDATE customers SET role = %s, is_superadmin = %s WHERE id = %s",
-                (account["role"], account["is_superadmin"], customer_id),
+                "UPDATE customers SET role = %s, is_superadmin = %s, password_hash = %s WHERE id = %s",
+                (account["role"], account["is_superadmin"], pw_hash, customer_id),
             )
             conn.commit()
             action = "updated"
