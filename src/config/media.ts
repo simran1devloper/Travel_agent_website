@@ -10,7 +10,7 @@ import vietnam from "@/assets/vitenam.jpeg";
 import aboutDubaiSunset from "@/assets/about-dubai-sunset.png";
 
 export const MEDIA = {
-  heroVideo: "/videodesign.mp4",
+  heroVideo: "https://pub-a5015b338a064f2fbfe45c11bbab3f57.r2.dev/videodesign.mp4",
   heroPoster: bangkokSingapore,
   aboutDubaiSunset,
   destinations: {
