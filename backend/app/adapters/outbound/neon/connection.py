@@ -28,11 +28,17 @@ def _translate_sql(sql: str) -> str:
 
 
 class _PgRow(dict):
-    """Dict subclass that also supports attribute-style access (like sqlite3.Row)."""
+    """Dict subclass that supports attribute-style AND integer-index access (like sqlite3.Row)."""
+
+    def __getitem__(self, key: Any) -> Any:
+        if isinstance(key, int):
+            # sqlite3.Row supports row[0] positional access; replicate that here
+            return list(self.values())[key]
+        return super().__getitem__(key)
 
     def __getattr__(self, name: str) -> Any:
         try:
-            return self[name]
+            return super().__getitem__(name)
         except KeyError:
             raise AttributeError(name) from None
 

@@ -198,9 +198,9 @@ def require_superadmin(
             container = request.app.state.container
             with container.db.connect() as conn:
                 row = conn.execute(
-                    "SELECT is_superadmin FROM customers WHERE id = ?", (customer_id,)
+                    "SELECT is_superadmin, role FROM customers WHERE id = ?", (customer_id,)
                 ).fetchone()
-            if row and row[0]:
+            if row and (row["is_superadmin"] or row["role"] == "superadmin"):
                 return
         except Exception:
             pass

@@ -154,7 +154,7 @@ def get_current_admin_customer_id(
                 "SELECT id FROM customers WHERE role='admin' ORDER BY id LIMIT 1"
             ).fetchone()
         if row:
-            return int(row[0])
+            return int(row["id"])
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

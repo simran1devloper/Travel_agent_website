@@ -36,9 +36,9 @@ def _get_is_superadmin(request: Request) -> bool:
                 cid = int(user["sub"])
                 with container.db.connect() as conn:
                     row = conn.execute(
-                        "SELECT is_superadmin FROM customers WHERE id=?", (cid,)
+                        "SELECT is_superadmin, role FROM customers WHERE id=?", (cid,)
                     ).fetchone()
-                return bool(row[0]) if row else False
+                return bool(row["is_superadmin"] or row["role"] == "superadmin") if row else False
         except Exception:
             pass
 
