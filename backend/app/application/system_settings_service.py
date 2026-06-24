@@ -57,7 +57,7 @@ class SystemSettingsService:
             row = conn.execute(
                 "SELECT value FROM system_settings WHERE key = ?", (key,)
             ).fetchone()
-        return str(row[0]) if row and row[0] else ""
+        return str(row["value"]) if row and row["value"] else ""
 
     def _db_set(self, key: str, value: str) -> None:
         now = utc_now()

@@ -25,14 +25,17 @@ class CloudflareR2FileStorage(IFileStorage):
     Falls back to env-based Settings if DB values are absent (developer convenience).
     """
 
-    def __init__(self, settings: Settings, db: Any) -> None:
+    def __init__(self, settings: Settings, db: Any, secrets_store: Any = None) -> None:
         self._settings = settings
         self._db = db
+        self._secrets_store = secrets_store
 
     def _get_config(self) -> dict[str, str]:
         """Read R2 credentials from DB, falling back to env vars."""
         from ....application.system_settings_service import SystemSettingsService
-        svc = SystemSettingsService(self._db)
+        from ....adapters.outbound.secrets.sqlite_store import SQLiteSecretsStore
+        store = self._secrets_store or SQLiteSecretsStore(db=self._db, encryption_key="")
+        svc = SystemSettingsService(self._db, store)
         db_cfg = svc.get_r2_config()
 
         return {

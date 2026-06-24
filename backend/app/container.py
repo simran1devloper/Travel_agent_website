@@ -148,9 +148,11 @@ def build_container(settings: Settings) -> Container:
 
     # ── Infrastructure ──────────────────────────────────────────────────────
     db = _build_database(settings)
+    # Build secrets_store early so file-storage adapters can read DB-stored credentials
+    secrets_store = _build_secrets_store(settings, db)
     file_storage = LocalFileStorage(str(settings.upload_dir))
     gdrive_storage = GDriveFileStorage(settings=settings, db=db)
-    r2_storage = CloudflareR2FileStorage(settings=settings, db=db)
+    r2_storage = CloudflareR2FileStorage(settings=settings, db=db, secrets_store=secrets_store)
 
     # ── Outbound repository adapters ────────────────────────────────────────
     customer_repo = SQLiteCustomerRepository(db)
@@ -196,8 +198,6 @@ def build_container(settings: Settings) -> Container:
         package_repo=package_repo,
     )
     memory_svc = MemoryService(memory_repo=memory_repo)
-    # Build system settings early so other services can read settings from DB
-    secrets_store = _build_secrets_store(settings, db)
     system_settings_svc = SystemSettingsService(db=db, secrets_store=secrets_store)
 
     _admin_default = system_settings_svc.get("storage.default_backend") or settings.default_storage_backend

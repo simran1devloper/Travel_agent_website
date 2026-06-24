@@ -6,3 +6,4 @@ email-validator==2.2.0
 PyJWT[crypto]>=2.10,<3.0
 python-dotenv>=1.0,<2.0
 psycopg2-binary>=2.9
+boto3>=1.35,<2.0

@@ -60,4 +60,4 @@ class GDriveFileStorage(IFileStorage):
                 " WHERE role='admin' AND gdrive_refresh_token IS NOT NULL"
                 " ORDER BY id LIMIT 1"
             ).fetchone()
-        return int(row[0]) if row else None
+        return int(row["id"]) if row else None
