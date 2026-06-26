@@ -66,9 +66,9 @@ class _PgCursor:
 
         self._cur.execute(translated, params)
 
-        # Capture lastrowid whenever the result contains an 'id' column
-        # (covers both explicit RETURNING and the auto-appended case above).
-        if self._cur.description:
+        # Capture lastrowid only for INSERT statements (with RETURNING id).
+        # Never consume rows from SELECT queries — that breaks fetchone() callers.
+        if (is_insert or already_has_returning) and self._cur.description:
             col_names = [d[0] for d in self._cur.description]
             if "id" in col_names:
                 try:
