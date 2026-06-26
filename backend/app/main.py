@@ -1,4 +1,4 @@
-"""FastAPI application factory.
+"""FastAPI application factory. v2
 
 This module is deliberately thin:
   - Creates the FastAPI app.
