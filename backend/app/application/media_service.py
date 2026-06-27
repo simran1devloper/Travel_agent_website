@@ -1,7 +1,7 @@
 """Media application service — supports multiple storage backends."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from ..domain.exceptions import NotFoundError, UnsupportedMediaTypeError
 from ..domain.utils import utc_now
@@ -29,6 +29,9 @@ class MediaService:
         r2_storage: IFileStorage | None = None,
         default_backend: StorageBackend = "local",
         user_default_backend: StorageBackend = "local",
+        # Optional callable that returns the current default backend from DB (overrides default_backend)
+        get_default_backend: Callable[[], str] | None = None,
+        get_user_default_backend: Callable[[], str] | None = None,
     ) -> None:
         self._media = media_repo
         self._backends: dict[str, IFileStorage] = {"local": local_storage}
@@ -38,6 +41,24 @@ class MediaService:
             self._backends["r2"] = r2_storage
         self._default = default_backend
         self._user_default = user_default_backend
+        self._get_default_backend = get_default_backend
+        self._get_user_default_backend = get_user_default_backend
+
+    def _current_default(self) -> str:
+        if self._get_default_backend is not None:
+            try:
+                return self._get_default_backend() or self._default
+            except Exception:
+                pass
+        return self._default
+
+    def _current_user_default(self) -> str:
+        if self._get_user_default_backend is not None:
+            try:
+                return self._get_user_default_backend() or self._user_default
+            except Exception:
+                pass
+        return self._user_default
 
     def available_backends(self) -> list[dict[str, Any]]:
         return [
@@ -46,7 +67,7 @@ class MediaService:
         ]
 
     def _pick_storage(self, backend: str | None) -> IFileStorage:
-        key = backend or self._default
+        key = backend or self._current_default()
         return self._backends.get(key) or self._backends["local"]
 
     # ------------------------------------------------------------------
@@ -62,7 +83,7 @@ class MediaService:
     ) -> dict[str, Any]:
         storage = self._pick_storage(storage_backend)
         filename, url, size = storage.save(original_filename, content, content_type)
-        backend_used = storage_backend or self._default
+        backend_used = storage_backend or self._current_default()
         media_id = self._media.create(
             {
                 "filename": filename,
@@ -91,7 +112,7 @@ class MediaService:
     ) -> dict[str, Any]:
         if content_type not in _ALLOWED_TYPES:
             raise UnsupportedMediaTypeError("Unsupported file type")
-        storage = self._pick_storage(self._user_default)
+        storage = self._pick_storage(self._current_user_default())
         filename, url, size = storage.save(original_filename, content, content_type)
         media_id = self._media.create(
             {

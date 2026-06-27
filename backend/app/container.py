@@ -210,6 +210,9 @@ def build_container(settings: Settings) -> Container:
         r2_storage=r2_storage,
         default_backend=_admin_default,
         user_default_backend=_user_default,
+        # Read current DB value on each upload so admin changes take effect without restart
+        get_default_backend=lambda: system_settings_svc.get("storage.default_backend") or settings.default_storage_backend,
+        get_user_default_backend=lambda: system_settings_svc.get("storage.user_default_backend") or "local",
     )
     planner_svc = PlannerService(planner_repo=planner_repo)
     wishlist_svc = WishlistService(wishlist_repo=wishlist_repo)

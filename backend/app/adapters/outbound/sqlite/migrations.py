@@ -749,6 +749,21 @@ def _patch_content_defaults(conn: sqlite3.Connection) -> None:
         ("contact", "contact_card", "discussion_text", "Free itinerary discussion", "text", "Discussion text", 10),
         ("contact", "contact_card", "cta_text", "Chat on WhatsApp", "text", "CTA text", 11),
         ("contact", "contact_card", "whatsapp_message", "Hi JourneyMakers, I want to plan a trip. Please share package details.", "text", "WhatsApp pre-filled message", 12),
+
+        # ── BOOKING / INQUIRY FORM OPTIONS ────────────────────────────────────
+        ("booking", "hero", "title", "Plan a journey designed around you.", "text", "Booking page hero title", 0),
+        ("booking", "hero", "subtitle", "Tell us what kind of moments you want to experience. We will craft the itinerary around places, pace, people, and feeling.", "text", "Booking page hero subtitle", 1),
+        ("booking", "form", "destinations_json", '["Japan","Bali","Switzerland","Thailand","Vietnam","Maldives","Europe","Dubai","Singapore","Sri Lanka","Rajasthan","Kerala","Goa","Ladakh","Himachal Pradesh","Open to ideas"]', "json", "Destination options (JSON array)", 0),
+        ("booking", "form", "experiences_json", '["Food discovery","Mountain escapes","Nightlife","Wellness","Art & culture","Island hopping","Photography","Luxury stays","Adventure","Wildlife","City exploration","Beach leisure"]', "json", "Experience options (JSON array)", 1),
+        ("booking", "form", "travel_styles_json", '["Luxury","Balanced","Adventure","Slow travel","Family","Romantic","Solo","Backpacker"]', "json", "Travel style options (JSON array)", 2),
+        ("booking", "form", "budget_options_json", '["Under $2k","$2k – $5k","$5k – $10k","$10k – $20k","$20k+","Flexible / Surprise me"]', "json", "Budget range options (JSON array)", 3),
+
+        # ── CONTACT FORM OPTIONS ─────────────────────────────────────────────
+        ("contact", "hero", "title", "Start a conversation.", "text", "Contact page hero title", 0),
+        ("contact", "hero", "subtitle", "Whether you have a question, a rough idea, or a full brief — drop it here.", "text", "Contact page hero subtitle", 1),
+        ("contact", "form", "journey_types_json", '["Food journey","Nature escape","City energy","Wellness reset","Adventure","Luxury","Family trip","Honeymoon"]', "json", "Journey type checkboxes (JSON array)", 0),
+        ("contact", "form", "destination_placeholder", "Where are you thinking of going?", "text", "Destination field placeholder", 1),
+        ("contact", "form", "message_placeholder", "Tell us about your travel plans or questions…", "text", "Message field placeholder", 2),
     ]
     try:
         conn.executemany(

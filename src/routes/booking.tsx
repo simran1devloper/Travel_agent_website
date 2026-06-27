@@ -107,6 +107,29 @@ const serviceGroups = [
 ];
 
 function BookingPage() {
+  const { data: bookingContent } = useQuery({
+    queryKey: ["content", "booking"],
+    queryFn: () => api.content("booking"),
+    staleTime: 60_000,
+  });
+
+  const formContent = bookingContent?.form ?? {};
+
+  function parseJsonOption<T>(key: string, fallback: T[]): T[] {
+    try {
+      const raw = formContent[key];
+      if (raw) return JSON.parse(raw) as T[];
+    } catch { /* ignore */ }
+    return fallback;
+  }
+
+  const dynamicDestinations = parseJsonOption<string>("destinations_json", [
+    "Japan", "Bali", "Switzerland", "Thailand", "Vietnam", "Open to ideas",
+  ]).map((name) => ({ name, detail: "" }));
+
+  const dynamicTravelStyles = parseJsonOption<string>("travel_styles_json", travelStyles);
+  const dynamicBudgetRanges = parseJsonOption<string>("budget_options_json", budgetRanges);
+
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -582,7 +605,7 @@ function BookingPage() {
                     <div>
                       <p className="mb-3 text-base font-semibold">Where are you thinking?</p>
                       <div className="grid gap-3 md:grid-cols-2">
-                        {destinationIdeas.map((destination) => (
+                        {dynamicDestinations.map((destination) => (
                           <ChoiceCard
                             key={destination.name}
                             active={selectedDestinations.includes(destination.name)}
@@ -690,7 +713,7 @@ function BookingPage() {
                     <div>
                       <div className="mb-3 text-base font-semibold">Travel style</div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {travelStyles.map((style) => (
+                        {dynamicTravelStyles.map((style) => (
                           <button
                             key={style}
                             type="button"
@@ -770,7 +793,7 @@ function BookingPage() {
                     <div>
                       <div className="mb-3 text-base font-semibold">Budget range</div>
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {budgetRanges.map((budget) => (
+                        {dynamicBudgetRanges.map((budget) => (
                           <button
                             key={budget}
                             type="button"
@@ -935,26 +958,103 @@ function SubmittedState({
 
   function handleDownloadPdf() {
     if (!summary) return;
-    const lines = [
-      "JourneyMakers — Journey Brief",
-      "================================",
-      "",
-      `Destinations: ${summary.destinations.join(", ") || "Open to ideas"}`,
-      `Experiences: ${summary.experiences.join(", ") || "—"}`,
-      `Travel styles: ${summary.styles.join(", ") || "—"}`,
-      `Travelers: ${summary.adults} adult${summary.adults !== 1 ? "s" : ""}${summary.children > 0 ? `, ${summary.children} child${summary.children !== 1 ? "ren" : ""}` : ""}`,
-      `Budget: ${summary.budget || "—"}`,
-      "",
-      "A travel designer will respond within 24 hours.",
-      "journeymakers.travel",
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "journeymakers-brief.txt";
-    a.click();
-    URL.revokeObjectURL(url);
+    const today = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+    const travelers = `${summary.adults} adult${summary.adults !== 1 ? "s" : ""}${summary.children > 0 ? ` + ${summary.children} child${summary.children !== 1 ? "ren" : ""}` : ""}`;
+
+    function badge(text: string) {
+      return `<span style="display:inline-block;background:#c76b2f;color:#fff;font-size:11px;font-weight:700;letter-spacing:.05em;padding:3px 12px;border-radius:99px;margin:3px 4px 3px 0">${text}</span>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>JourneyMakers — Your Journey Brief</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',sans-serif;background:#faf6ef;color:#1a1410;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{max-width:720px;margin:0 auto;padding:48px 40px;background:#fff;min-height:100vh}
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1a1410;padding-bottom:24px;margin-bottom:36px}
+  .logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;letter-spacing:-.5px;color:#1a1410}
+  .logo span{color:#c76b2f}
+  .doc-type{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#888;text-align:right}
+  .doc-type strong{display:block;font-size:13px;color:#1a1410;letter-spacing:0;text-transform:none;margin-top:2px}
+  .hero{background:linear-gradient(135deg,#1a1410 0%,#2d2016 100%);color:#fff;border-radius:16px;padding:36px 32px;margin-bottom:32px}
+  .hero-eyebrow{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#c76b2f;margin-bottom:10px}
+  .hero-title{font-family:'Playfair Display',serif;font-size:32px;line-height:1.2;font-weight:700;margin-bottom:8px}
+  .hero-subtitle{font-size:14px;color:#c9b99a;line-height:1.6}
+  .section{margin-bottom:28px}
+  .section-label{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#c76b2f;margin-bottom:10px}
+  .section-title{font-size:15px;font-weight:600;margin-bottom:8px;color:#1a1410}
+  .chips{line-height:2}
+  .divider{border:none;border-top:1px solid #ede8e0;margin:24px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .stat-box{background:#faf6ef;border-radius:12px;padding:18px 20px}
+  .stat-value{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#1a1410}
+  .stat-label{font-size:12px;color:#888;margin-top:3px;font-weight:500}
+  .footer{margin-top:48px;padding-top:20px;border-top:1px solid #ede8e0;display:flex;justify-content:space-between;align-items:center}
+  .footer-brand{font-family:'Playfair Display',serif;font-size:14px;font-weight:700}
+  .footer-info{font-size:11px;color:#888;text-align:right}
+  .promise-box{background:#f0ebe3;border-radius:12px;padding:20px 24px;margin:28px 0}
+  .promise-box p{font-size:13px;color:#5a4a3a;line-height:1.65}
+  .promise-box strong{color:#1a1410}
+  @media print{body{background:#fff}.page{padding:32px}}
+</style></head><body>
+<div class="page">
+  <div class="header">
+    <div class="logo">Journey<span>Makers</span></div>
+    <div class="doc-type">Journey Brief<strong>${today}</strong></div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow">Private Travel Design</div>
+    <div class="hero-title">Your journey, designed<br>around your moments.</div>
+    <div class="hero-subtitle">This brief captures your vision. A dedicated travel designer will reach out within 24 hours with curated ideas, route options, and pricing.</div>
+  </div>
+
+  ${summary.destinations.length > 0 ? `
+  <div class="section">
+    <div class="section-label">Destinations</div>
+    <div class="chips">${summary.destinations.map(badge).join("")}</div>
+  </div><hr class="divider">` : ""}
+
+  ${summary.experiences.length > 0 ? `
+  <div class="section">
+    <div class="section-label">Experiences Sought</div>
+    <div class="chips">${summary.experiences.map(badge).join("")}</div>
+  </div><hr class="divider">` : ""}
+
+  ${summary.styles.length > 0 ? `
+  <div class="section">
+    <div class="section-label">Travel Style</div>
+    <div class="chips">${summary.styles.map((s) => `<span style="display:inline-block;background:#f0ebe3;color:#1a1410;font-size:11px;font-weight:600;padding:3px 12px;border-radius:99px;margin:3px 4px 3px 0;border:1px solid #ddd6cc">${s}</span>`).join("")}</div>
+  </div><hr class="divider">` : ""}
+
+  <div class="grid2">
+    <div class="stat-box">
+      <div class="stat-value">${travelers}</div>
+      <div class="stat-label">Travelers</div>
+    </div>
+    ${summary.budget ? `<div class="stat-box">
+      <div class="stat-value">${summary.budget}</div>
+      <div class="stat-label">Budget Range</div>
+    </div>` : ""}
+  </div>
+
+  <div class="promise-box">
+    <p><strong>What happens next:</strong> Your brief has been received by our planning team. A travel designer will reach out within 24 hours with first ideas, destination questions, and curated route options — crafted around the moments you described.</p>
+  </div>
+
+  <div class="footer">
+    <div class="footer-brand">JourneyMakers</div>
+    <div class="footer-info">journeymakers.travel<br>hello@journeymakers.travel</div>
+  </div>
+</div>
+<script>window.onload=function(){window.print();}</script>
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=800,height=900");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
   }
 
   async function handleShareLink() {
@@ -1047,7 +1147,7 @@ function SubmittedState({
                 onClick={handleDownloadPdf}
                 className="inline-flex min-h-12 items-center gap-2 rounded-full border border-border bg-white px-6 text-sm font-bold text-foreground transition-all hover:-translate-y-0.5 hover:bg-[#f7f2ea]"
               >
-                <ArrowRight className="size-4 rotate-90" /> Download brief
+                <ArrowRight className="size-4 rotate-90" /> Download Brochure
               </button>
               <button
                 type="button"

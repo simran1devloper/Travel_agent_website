@@ -813,7 +813,7 @@ function OverviewTab() {
       status?: string;
       plannerId?: number | null;
     }) =>
-      fetch(`http://localhost:8000/admin/inquiries/${id}`, {
+      fetch(`${API_BASE_URL}/admin/inquiries/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json", "x-admin-token": "dev-admin-token" },
         body: JSON.stringify({ status, assigned_planner_id: plannerId }),
@@ -3042,22 +3042,9 @@ function MediaTab() {
   });
 
   const uploadMut = useMutation({
-    mutationFn: async (file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      const backend = uploadBackend === "auto" ? "" : uploadBackend;
-      const url = backend
-        ? `${API_BASE_URL}/media?storage_backend=${encodeURIComponent(backend)}`
-        : `${API_BASE_URL}/media`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "x-admin-token": "dev-admin-token" },
-        body: form,
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(err.detail ?? "Upload failed");
-      }
+    mutationFn: (file: File) => {
+      const backend = uploadBackend === "auto" ? undefined : uploadBackend;
+      return api.adminUploadMedia(file, file.name, backend);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-media"] }),
   });
@@ -3169,7 +3156,7 @@ function MediaTab() {
                 <div className="aspect-square overflow-hidden">
                   {isImage(m) ? (
                     <img
-                      src={`http://localhost:8000${m.url}`}
+                      src={m.url?.startsWith("http") ? m.url : `${API_BASE_URL}${m.url}`}
                       alt={m.alt_text ?? m.filename}
                       className="h-full w-full object-cover"
                     />
@@ -4753,8 +4740,9 @@ function ServicesTab() {
           mode={drawerMode}
           value={editing}
           pending={saveService.isPending}
+          error={saveService.error as Error | null}
           onChange={setEditing}
-          onClose={() => setEditing(null)}
+          onClose={() => { setEditing(null); saveService.reset(); }}
           onSave={(payload) => saveService.mutate(payload)}
         />
       )}
@@ -4766,6 +4754,7 @@ function ServiceEditorDrawer({
   mode,
   value,
   pending,
+  error,
   onChange,
   onClose,
   onSave,
@@ -4773,14 +4762,28 @@ function ServiceEditorDrawer({
   mode: "create" | "edit";
   value: ServicePayload;
   pending: boolean;
+  error?: Error | null;
   onChange: Dispatch<SetStateAction<ServicePayload | null>>;
   onClose: () => void;
   onSave: (payload: ServicePayload) => void;
 }) {
   const { selected: assetBackend, setSelected: setAssetBackend, backends: assetBackends, configuredKeys: assetConfiguredKeys, resolveBackend: resolveAssetBackend, pendingConfirm: assetPendingConfirm } = useStorageBackend();
+  const [slugEdited, setSlugEdited] = useState(mode === "edit");
+
+  function toSlug(name: string) {
+    return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
 
   function update<K extends keyof ServicePayload>(key: K, next: ServicePayload[K]) {
-    onChange((current) => (current ? { ...current, [key]: next } : current));
+    onChange((current) => {
+      if (!current) return current;
+      const updated = { ...current, [key]: next };
+      // Auto-generate slug from name in create mode when not manually edited
+      if (key === "name" && mode === "create" && !slugEdited) {
+        updated.id = toSlug(String(next));
+      }
+      return updated;
+    });
   }
 
   async function uploadServiceAsset(file: File, key: "image_url" | "icon_url") {
@@ -4813,11 +4816,18 @@ function ServiceEditorDrawer({
               value={value.name}
               onChange={(v) => update("name", v)}
             />
-            <AdminTextInput
-              label="Service Slug"
-              value={value.id}
-              onChange={(v) => update("id", v.toLowerCase().replace(/[^a-z0-9-]+/g, "-"))}
-            />
+            <div>
+              <AdminTextInput
+                label={`Service Slug${mode === "create" ? " (auto-generated from name)" : ""}`}
+                value={value.id}
+                onChange={(v) => {
+                  setSlugEdited(true);
+                  update("id", v.toLowerCase().replace(/[^a-z0-9-]+/g, "-"));
+                }}
+              />
+              {!value.id && <p className="mt-1 text-xs text-red-500">Slug is required (auto-fills when you type a name).</p>}
+              {value.id && !/^[a-z0-9-]+$/.test(value.id) && <p className="mt-1 text-xs text-red-500">Only lowercase letters, numbers, and hyphens.</p>}
+            </div>
             <AdminTextInput
               label="Service Category"
               value={value.category ?? ""}
@@ -5006,30 +5016,37 @@ function ServiceEditorDrawer({
           </AdminFormSection>
         </div>
 
-        <div className="sticky bottom-0 flex flex-col gap-3 border-t border-border bg-background/95 p-5 backdrop-blur sm:flex-row">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => onSave({ ...value, status: "draft" })}
-            className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold disabled:opacity-50"
-          >
-            Save as Draft
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => onSave({ ...value, status: "published" })}
-            className="min-h-12 flex-1 rounded-full bg-accent px-5 text-sm font-black text-white disabled:opacity-50"
-          >
-            Publish Service
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold"
-          >
-            Cancel
-          </button>
+        <div className="sticky bottom-0 border-t border-border bg-background/95 p-5 backdrop-blur">
+          {error && (
+            <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+              <strong>Save failed:</strong> {error.message}
+            </div>
+          )}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              disabled={pending || !value.id || !value.name}
+              onClick={() => onSave({ ...value, status: "draft" })}
+              className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              disabled={pending || !value.id || !value.name}
+              onClick={() => onSave({ ...value, status: "published" })}
+              className="min-h-12 flex-1 rounded-full bg-accent px-5 text-sm font-black text-white disabled:opacity-50"
+            >
+              {pending ? "Saving…" : "Publish Service"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-12 flex-1 rounded-full border border-border px-5 text-sm font-bold"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </aside>
     </div>
@@ -5042,6 +5059,65 @@ function AdminFormSection({ title, children }: { title: string; children: React.
       <h4 className="mb-4 text-sm font-black uppercase text-foreground">{title}</h4>
       <div className="grid gap-4 sm:grid-cols-2">{children}</div>
     </section>
+  );
+}
+
+function JsonArrayEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parsed: string[] = (() => {
+    try { return JSON.parse(value) as string[]; } catch { return []; }
+  })();
+  const [draft, setDraft] = useState("");
+
+  function updateItems(items: string[]) {
+    onChange(JSON.stringify(items));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {parsed.map((item, i) => (
+          <span
+            key={i}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs font-semibold"
+          >
+            {item}
+            <button
+              type="button"
+              onClick={() => updateItems(parsed.filter((_, idx) => idx !== i))}
+              className="ml-0.5 text-muted-foreground hover:text-destructive"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {parsed.length === 0 && (
+          <span className="text-xs italic text-muted-foreground">No options — add one below.</span>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && draft.trim()) {
+              e.preventDefault();
+              updateItems([...parsed, draft.trim()]);
+              setDraft("");
+            }
+          }}
+          placeholder="Type option and press Enter to add…"
+          className="flex-1 rounded-xl border border-border bg-secondary/30 px-3 py-2 text-sm outline-none focus:border-foreground"
+        />
+        <button
+          type="button"
+          onClick={() => { if (draft.trim()) { updateItems([...parsed, draft.trim()]); setDraft(""); } }}
+          className="rounded-xl border border-border bg-white px-3 py-2 text-xs font-bold hover:bg-secondary"
+        >
+          Add
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -6747,6 +6823,7 @@ function PagesTab() {
     destinations: "Destinations",
     services: "Services",
     global: "Global / Brand",
+    booking: "Booking Form",
   };
 
   return (
@@ -6871,16 +6948,21 @@ function PagesTab() {
                   )
                     .sort((a, b) => (a[1].sort_order ?? 0) - (b[1].sort_order ?? 0))
                     .map(([key, meta]) => (
-                      <div key={key}>
+                      <div key={key} className={meta.value_type === "json" ? "col-span-full" : ""}>
                         <label className="mb-1.5 block text-xs font-bold text-foreground/70">
                           {meta.label || key}
                         </label>
-                        {meta.value_type === "text" &&
-                        (getValue(section, key).length > 80 ||
-                          key.includes("body") ||
-                          key.includes("description") ||
-                          key.includes("tagline") ||
-                          key.includes("subtitle")) ? (
+                        {meta.value_type === "json" ? (
+                          <JsonArrayEditor
+                            value={getValue(section, key)}
+                            onChange={(v) => handleChange(section, key, v)}
+                          />
+                        ) : meta.value_type === "text" &&
+                          (getValue(section, key).length > 80 ||
+                            key.includes("body") ||
+                            key.includes("description") ||
+                            key.includes("tagline") ||
+                            key.includes("subtitle")) ? (
                           <textarea
                             rows={3}
                             value={getValue(section, key)}
@@ -6982,9 +7064,8 @@ function SettingsTab() {
   const [defaultMsg, setDefaultMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (settings["storage.default_backend"]) {
-      setSelectedDefault(settings["storage.default_backend"]);
-    }
+    // Pre-select DB value; fall back to "local" so the button is never stuck disabled
+    setSelectedDefault(settings["storage.default_backend"] || "local");
   }, [settings]);
 
   async function handleSaveDefault() {
